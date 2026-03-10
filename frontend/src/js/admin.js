@@ -1,448 +1,707 @@
-// Estado da aplicação
-let usuarios = [
-  {
-    id: 1,
-    nome: "Administrador",
-    usuario: "admin",
-    senha: "123456",
-    tipo: "admin",
-  },
-  {
-    id: 2,
-    nome: "João Garçom",
-    usuario: "joao",
-    senha: "123456",
-    tipo: "garcom",
-  },
-  {
-    id: 3,
-    nome: "Maria Cozinha",
-    usuario: "maria",
-    senha: "123456",
-    tipo: "cozinha",
-  },
-];
+// ===== ESTADO DA APLICAÇÃO =====
+let state = {
+    categorias: [],
+    cardapio: [],
+    mesas: [],
+    usuarios: [],
+    config: {},
+    stats: {
+        faturamento: 0,
+        pedidos: 0,
+        clientes: 0,
+        tempoMedio: 0
+    }
+};
 
-let cardapio = [
-  {
-    id: 1,
-    nome: "Filé à Parmegiana",
-    preco: 45.9,
-    categoria: "pratos",
-    descricao: "Filé mignon à parmegiana",
-  },
-  {
-    id: 2,
-    nome: "Frango Grelhado",
-    preco: 32.9,
-    categoria: "pratos",
-    descricao: "Frango grelhado com legumes",
-  },
-  {
-    id: 3,
-    nome: "Coca Cola 2L",
-    preco: 12.9,
-    categoria: "bebidas",
-    descricao: "Refrigerante Coca Cola 2 litros",
-  },
-  {
-    id: 4,
-    nome: "Suco de Laranja",
-    preco: 8.9,
-    categoria: "bebidas",
-    descricao: "Suco natural de laranja",
-  },
-  {
-    id: 5,
-    nome: "Pudim",
-    preco: 15.9,
-    categoria: "sobremesas",
-    descricao: "Pudim de leite condensado",
-  },
-  {
-    id: 6,
-    nome: "Brownie",
-    preco: 18.9,
-    categoria: "sobremesas",
-    descricao: "Brownie de chocolate com sorvete",
-  },
-];
-
-let usuarioLogado = null;
-
-// Inicialização
-document.addEventListener("DOMContentLoaded", () => {
-  configurarEventos();
+// ===== INICIALIZAÇÃO =====
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🚀 Inicializando painel administrativo...');
+    
+    carregarTudo();
+    configurarEventos();
+    configurarBuscas();
 });
 
-function configurarEventos() {
-  // Login
-  const btnLogin = document.getElementById("btn-login");
-  if (btnLogin) {
-    btnLogin.addEventListener("click", fazerLogin);
-  }
-
-  // Logout
-  const btnLogout = document.getElementById("btn-logout");
-  if (btnLogout) {
-    btnLogout.addEventListener("click", fazerLogout);
-  }
-
-  // Tabs
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      const tab = e.target.dataset.tab;
-      abrirTab(tab);
-    });
-  });
-
-  // Formulário de item
-  const formItem = document.getElementById("form-item");
-  if (formItem) {
-    formItem.addEventListener("submit", (e) => {
-      e.preventDefault();
-      salvarItem();
-    });
-  }
-
-  // Botão cancelar
-  const btnCancelar = document.getElementById("btn-cancelar");
-  if (btnCancelar) {
-    btnCancelar.addEventListener("click", limparFormItem);
-  }
-
-  // Formulário de usuário
-  const formUsuario = document.getElementById("form-usuario");
-  if (formUsuario) {
-    formUsuario.addEventListener("submit", (e) => {
-      e.preventDefault();
-      salvarUsuario();
-    });
-  }
-
-  // Botão gerar relatório
-  const btnRelatorio = document.getElementById("btn-gerar-relatorio");
-  if (btnRelatorio) {
-    btnRelatorio.addEventListener("click", gerarRelatorio);
-  }
-
-  // Botão salvar configurações
-  const btnConfig = document.getElementById("btn-salvar-config");
-  if (btnConfig) {
-    btnConfig.addEventListener("click", salvarConfiguracoes);
-  }
-
-  // Enter no campo senha
-  const inputSenha = document.getElementById("senha");
-  if (inputSenha) {
-    inputSenha.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") {
-        fazerLogin();
-      }
-    });
-  }
-}
-
-function fazerLogin() {
-  const usuario = document.getElementById("usuario").value;
-  const senha = document.getElementById("senha").value;
-
-  const user = usuarios.find((u) => u.usuario === usuario && u.senha === senha);
-
-  if (user) {
-    usuarioLogado = user;
-    document.getElementById("login-section").style.display = "none";
-    document.getElementById("admin-section").style.display = "block";
-    document.getElementById("erro-login").style.display = "none";
-
-    // Carregar dados
-    carregarCardapio();
-    carregarUsuarios();
-
-    console.log("Login realizado com sucesso!");
-  } else {
-    document.getElementById("erro-login").style.display = "block";
-  }
-}
-
-function fazerLogout() {
-  usuarioLogado = null;
-  document.getElementById("login-section").style.display = "block";
-  document.getElementById("admin-section").style.display = "none";
-  document.getElementById("usuario").value = "";
-  document.getElementById("senha").value = "";
-}
-
-function abrirTab(tabName) {
-  // Atualizar botões
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.classList.remove("ativo");
-    if (btn.dataset.tab === tabName) {
-      btn.classList.add("ativo");
+// ===== CARREGAR TODOS OS DADOS =====
+async function carregarTudo() {
+    try {
+        await Promise.all([
+            carregarCategorias(),
+            carregarCardapio(),
+            carregarMesas(),
+            carregarUsuarios(),
+            carregarStats(),
+            carregarConfig()
+        ]);
+        
+        console.log('✅ Todos os dados carregados');
+        mostrarNotificacao('Dados carregados com sucesso!', 'success');
+    } catch (error) {
+        console.error('❌ Erro ao carregar dados:', error);
+        mostrarNotificacao('Erro ao carregar dados', 'error');
     }
-  });
-
-  // Atualizar conteúdo
-  document.querySelectorAll(".tab-pane").forEach((pane) => {
-    pane.classList.remove("ativo");
-  });
-  document.getElementById(`tab-${tabName}`).classList.add("ativo");
-
-  // Carregar dados da tab
-  if (tabName === "cardapio") {
-    carregarCardapio();
-  } else if (tabName === "usuarios") {
-    carregarUsuarios();
-  }
 }
 
-// Funções do Cardápio
-function carregarCardapio() {
-  const tbody = document.getElementById("tabela-cardapio-body");
-  if (!tbody) return;
+// ===== CATEGORIAS =====
+async function carregarCategorias() {
+    try {
+        const response = await fetch('/api/categorias');
+        state.categorias = await response.json();
+        atualizarTabelaCategorias();
+        atualizarSelectCategorias();
+        console.log('📋 Categorias carregadas:', state.categorias.length);
+    } catch (error) {
+        console.error('Erro ao carregar categorias:', error);
+    }
+}
 
-  tbody.innerHTML = "";
-
-  cardapio.forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-            <td>${item.id}</td>
-            <td>${item.nome}</td>
-            <td>R$ ${item.preco.toFixed(2)}</td>
-            <td>${item.categoria}</td>
+function atualizarTabelaCategorias() {
+    const tbody = document.getElementById('categorias-table-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    state.categorias.forEach(cat => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${cat.id}</td>
+            <td style="font-size: 1.5rem;">${cat.icone || '📋'}</td>
+            <td>${cat.nome}</td>
             <td>
-                <button class="btn-editar" onclick="editarItem(${item.id})">✏️ Editar</button>
-                <button class="btn-excluir" onclick="excluirItem(${item.id})">🗑️ Excluir</button>
+                <div style="width: 30px; height: 30px; border-radius: 50%; background: ${cat.cor};"></div>
+            </td>
+            <td>${cat.ordem || 0}</td>
+            <td>
+                <span class="status-badge ${cat.ativo ? 'ativo' : 'inativo'}">
+                    ${cat.ativo ? 'Ativo' : 'Inativo'}
+                </span>
+            </td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn-icon btn-edit" onclick="editarCategoria(${cat.id})">✏️</button>
+                    <button class="btn-icon btn-toggle" onclick="toggleCategoria(${cat.id})">
+                        ${cat.ativo ? '🔴' : '🟢'}
+                    </button>
+                    <button class="btn-icon btn-delete" onclick="excluirCategoria(${cat.id})">🗑️</button>
+                </div>
             </td>
         `;
-    tbody.appendChild(tr);
-  });
-
-  // Atualizar cardápio no localStorage para o garçom
-  localStorage.setItem("cardapio", JSON.stringify(cardapio));
+        tbody.appendChild(tr);
+    });
 }
 
-function salvarItem() {
-  const id = document.getElementById("item-id").value;
-  const nome = document.getElementById("item-nome").value;
-  const preco = parseFloat(document.getElementById("item-preco").value);
-  const categoria = document.getElementById("item-categoria").value;
-  const descricao = document.getElementById("item-descricao").value;
+function atualizarSelectCategorias() {
+    const select = document.getElementById('item-categoria');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Selecione...</option>';
+    
+    state.categorias
+        .filter(cat => cat.ativo)
+        .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+        .forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = `${cat.icone || '📋'} ${cat.nome}`;
+            select.appendChild(option);
+        });
+}
 
-  if (id) {
-    // Editar existente
-    const item = cardapio.find((i) => i.id === parseInt(id));
-    if (item) {
-      item.nome = nome;
-      item.preco = preco;
-      item.categoria = categoria;
-      item.descricao = descricao;
-    }
-  } else {
-    // Novo item
-    const novoItem = {
-      id: cardapio.length + 1,
-      nome,
-      preco,
-      categoria,
-      descricao,
+// Evento do formulário de categoria
+document.getElementById('form-categoria')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const categoria = {
+        nome: document.getElementById('cat-nome').value,
+        icone: document.getElementById('cat-icone').value || '📋',
+        cor: document.getElementById('cat-cor').value,
+        ordem: parseInt(document.getElementById('cat-ordem').value) || 0
     };
-    cardapio.push(novoItem);
-  }
+    
+    try {
+        const response = await fetch('/api/categorias', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(categoria)
+        });
+        
+        if (!response.ok) throw new Error('Erro ao salvar');
+        
+        mostrarNotificacao('Categoria criada com sucesso!', 'success');
+        limparFormCategoria();
+        await carregarCategorias();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao criar categoria', 'error');
+    }
+});
 
-  limparFormItem();
-  carregarCardapio();
-  mostrarMensagem("Item salvo com sucesso!", "sucesso");
+window.editarCategoria = (id) => {
+    const cat = state.categorias.find(c => c.id === id);
+    if (!cat) return;
+    
+    document.getElementById('cat-nome').value = cat.nome;
+    document.getElementById('cat-icone').value = cat.icone || '📋';
+    document.getElementById('cat-cor').value = cat.cor || '#4CAF50';
+    document.getElementById('cat-ordem').value = cat.ordem || 0;
+    
+    // Rolar para o formulário
+    document.querySelector('.form-panel').scrollIntoView({ behavior: 'smooth' });
+};
+
+window.toggleCategoria = async (id) => {
+    const cat = state.categorias.find(c => c.id === id);
+    if (!cat) return;
+    
+    try {
+        const response = await fetch(`/api/categorias/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...cat, ativo: !cat.ativo })
+        });
+        
+        if (!response.ok) throw new Error('Erro ao atualizar');
+        
+        mostrarNotificacao(`Categoria ${cat.ativo ? 'desativada' : 'ativada'}!`, 'success');
+        await carregarCategorias();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao atualizar categoria', 'error');
+    }
+};
+
+window.excluirCategoria = async (id) => {
+    if (!confirm('Tem certeza que deseja excluir esta categoria?')) return;
+    
+    try {
+        const response = await fetch(`/api/categorias/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Erro ao excluir');
+        
+        mostrarNotificacao('Categoria excluída!', 'success');
+        await carregarCategorias();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao excluir categoria', 'error');
+    }
+};
+
+window.limparFormCategoria = () => {
+    document.getElementById('cat-nome').value = '';
+    document.getElementById('cat-icone').value = '📋';
+    document.getElementById('cat-cor').value = '#4CAF50';
+    document.getElementById('cat-ordem').value = '0';
+};
+
+// ===== CARDÁPIO =====
+async function carregarCardapio() {
+    try {
+        const response = await fetch('/api/cardapio');
+        state.cardapio = await response.json();
+        atualizarTabelaCardapio();
+        console.log('🍽️ Cardápio carregado:', state.cardapio.length);
+    } catch (error) {
+        console.error('Erro ao carregar cardápio:', error);
+    }
 }
 
-function editarItem(id) {
-  const item = cardapio.find((i) => i.id === id);
-  if (item) {
-    document.getElementById("item-id").value = item.id;
-    document.getElementById("item-nome").value = item.nome;
-    document.getElementById("item-preco").value = item.preco;
-    document.getElementById("item-categoria").value = item.categoria;
-    document.getElementById("item-descricao").value = item.descricao || "";
-  }
+function atualizarTabelaCardapio() {
+    const tbody = document.getElementById('cardapio-table-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    state.cardapio.forEach(item => {
+        const categoria = state.categorias.find(c => c.id === item.categoria_id);
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${item.id}</td>
+            <td>${item.nome}</td>
+            <td>${categoria ? `${categoria.icone} ${categoria.nome}` : 'Sem categoria'}</td>
+            <td>${formatarPreco(item.preco)}</td>
+            <td>${item.tempo_preparo || 15} min</td>
+            <td>
+                <span class="status-badge ${item.disponivel ? 'ativo' : 'inativo'}">
+                    ${item.disponivel ? 'Disponível' : 'Indisponível'}
+                </span>
+            </td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn-icon btn-edit" onclick="editarItem(${item.id})">✏️</button>
+                    <button class="btn-icon btn-toggle" onclick="toggleItem(${item.id})">
+                        ${item.disponivel ? '🔴' : '🟢'}
+                    </button>
+                    <button class="btn-icon btn-delete" onclick="excluirItem(${item.id})">🗑️</button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
-function excluirItem(id) {
-  if (confirm("Tem certeza que deseja excluir este item?")) {
-    cardapio = cardapio.filter((i) => i.id !== id);
-    carregarCardapio();
-    mostrarMensagem("Item excluído com sucesso!", "sucesso");
-  }
+// Evento do formulário de item
+document.getElementById('form-item')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const item = {
+        id: document.getElementById('item-id').value,
+        nome: document.getElementById('item-nome').value,
+        preco: parseFloat(document.getElementById('item-preco').value),
+        categoria_id: parseInt(document.getElementById('item-categoria').value),
+        descricao: document.getElementById('item-descricao').value,
+        tempo_preparo: parseInt(document.getElementById('item-tempo').value) || 15
+    };
+    
+    try {
+        const url = item.id ? `/api/cardapio/${item.id}` : '/api/cardapio';
+        const method = item.id ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item)
+        });
+        
+        if (!response.ok) throw new Error('Erro ao salvar');
+        
+        mostrarNotificacao(`Item ${item.id ? 'atualizado' : 'criado'} com sucesso!`, 'success');
+        limparFormItem();
+        await carregarCardapio();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao salvar item', 'error');
+    }
+});
+
+window.editarItem = (id) => {
+    const item = state.cardapio.find(i => i.id === id);
+    if (!item) return;
+    
+    document.getElementById('item-id').value = item.id;
+    document.getElementById('item-nome').value = item.nome;
+    document.getElementById('item-preco').value = item.preco;
+    document.getElementById('item-categoria').value = item.categoria_id;
+    document.getElementById('item-descricao').value = item.descricao || '';
+    document.getElementById('item-tempo').value = item.tempo_preparo || 15;
+    
+    document.querySelector('.form-panel').scrollIntoView({ behavior: 'smooth' });
+};
+
+window.toggleItem = async (id) => {
+    const item = state.cardapio.find(i => i.id === id);
+    if (!item) return;
+    
+    try {
+        const response = await fetch(`/api/cardapio/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...item, disponivel: !item.disponivel })
+        });
+        
+        if (!response.ok) throw new Error('Erro ao atualizar');
+        
+        mostrarNotificacao(`Item ${item.disponivel ? 'indisponível' : 'disponível'}!`, 'success');
+        await carregarCardapio();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao atualizar item', 'error');
+    }
+};
+
+window.excluirItem = async (id) => {
+    if (!confirm('Tem certeza que deseja excluir este item?')) return;
+    
+    try {
+        const response = await fetch(`/api/cardapio/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Erro ao excluir');
+        
+        mostrarNotificacao('Item excluído!', 'success');
+        await carregarCardapio();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao excluir item', 'error');
+    }
+};
+
+window.limparFormItem = () => {
+    document.getElementById('item-id').value = '';
+    document.getElementById('item-nome').value = '';
+    document.getElementById('item-preco').value = '';
+    document.getElementById('item-categoria').value = '';
+    document.getElementById('item-descricao').value = '';
+    document.getElementById('item-tempo').value = '15';
+};
+
+// ===== MESAS =====
+async function carregarMesas() {
+    try {
+        const response = await fetch('/api/mesas');
+        state.mesas = await response.json();
+        atualizarGridMesas();
+        console.log('🪑 Mesas carregadas:', state.mesas.length);
+    } catch (error) {
+        console.error('Erro ao carregar mesas:', error);
+    }
 }
 
-function limparFormItem() {
-  document.getElementById("item-id").value = "";
-  document.getElementById("item-nome").value = "";
-  document.getElementById("item-preco").value = "";
-  document.getElementById("item-categoria").value = "pratos";
-  document.getElementById("item-descricao").value = "";
-}
-
-// Funções de Usuários
-function carregarUsuarios() {
-  const tbody = document.getElementById("tabela-usuarios-body");
-  if (!tbody) return;
-
-  tbody.innerHTML = "";
-
-  usuarios.forEach((user) => {
-    if (user.id !== 1) {
-      // Não mostrar o admin principal
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-                <td>${user.id}</td>
-                <td>${user.nome}</td>
-                <td>${user.usuario}</td>
-                <td>${user.tipo}</td>
-                <td>
-                    <button class="btn-editar" onclick="editarUsuario(${user.id})">✏️ Editar</button>
-                    <button class="btn-excluir" onclick="excluirUsuario(${user.id})">🗑️ Excluir</button>
-                </td>
+function atualizarGridMesas() {
+    const grid = document.getElementById('mesas-grid');
+    if (!grid) return;
+    
+    grid.innerHTML = '';
+    
+    state.mesas
+        .sort((a, b) => a.numero - b.numero)
+        .forEach(mesa => {
+            const card = document.createElement('div');
+            card.className = 'categoria-card';
+            card.innerHTML = `
+                <div class="categoria-icone">🪑</div>
+                <div class="categoria-nome">Mesa ${mesa.numero}</div>
+                <div class="categoria-cor" style="background: ${mesa.status === 'ocupada' ? '#ff9800' : '#4CAF50'};"></div>
+                <div style="margin-top: 10px;">
+                    <span class="status-badge ${mesa.status === 'ocupada' ? 'inativo' : 'ativo'}">
+                        ${mesa.status === 'ocupada' ? '👥 Ocupada' : '✅ Livre'}
+                    </span>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button class="btn-icon btn-edit" onclick="editarMesa(${mesa.id})">✏️</button>
+                    <button class="btn-icon btn-delete" onclick="excluirMesa(${mesa.id})">🗑️</button>
+                </div>
             `;
-      tbody.appendChild(tr);
-    }
-  });
+            grid.appendChild(card);
+        });
 }
 
-function salvarUsuario() {
-  const id = document.getElementById("usuario-id").value;
-  const nome = document.getElementById("usuario-nome").value;
-  const usuario = document.getElementById("usuario-login").value;
-  const senha = document.getElementById("usuario-senha").value;
-  const tipo = document.getElementById("usuario-tipo").value;
-
-  if (id) {
-    // Editar existente
-    const user = usuarios.find((u) => u.id === parseInt(id));
-    if (user) {
-      user.nome = nome;
-      user.usuario = usuario;
-      user.tipo = tipo;
-      if (senha) {
-        user.senha = senha;
-      }
-    }
-  } else {
-    // Novo usuário
-    const novoUsuario = {
-      id: usuarios.length + 1,
-      nome,
-      usuario,
-      senha: senha || "123456",
-      tipo,
+// Evento do formulário de mesa
+document.getElementById('form-mesa')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const mesa = {
+        numero: parseInt(document.getElementById('mesa-numero').value)
     };
-    usuarios.push(novoUsuario);
-  }
+    
+    try {
+        const response = await fetch('/api/mesas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(mesa)
+        });
+        
+        if (!response.ok) throw new Error('Erro ao criar mesa');
+        
+        mostrarNotificacao('Mesa criada com sucesso!', 'success');
+        document.getElementById('mesa-numero').value = '';
+        await carregarMesas();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao criar mesa', 'error');
+    }
+});
 
-  limparFormUsuario();
-  carregarUsuarios();
-  mostrarMensagem("Usuário salvo com sucesso!", "sucesso");
+window.excluirMesa = async (id) => {
+    if (!confirm('Tem certeza que deseja excluir esta mesa?')) return;
+    
+    try {
+        const response = await fetch(`/api/mesas/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Erro ao excluir');
+        
+        mostrarNotificacao('Mesa excluída!', 'success');
+        await carregarMesas();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao excluir mesa', 'error');
+    }
+};
+
+// ===== USUÁRIOS =====
+async function carregarUsuarios() {
+    try {
+        const response = await fetch('/api/usuarios');
+        state.usuarios = await response.json();
+        atualizarTabelaUsuarios();
+        console.log('👥 Usuários carregados:', state.usuarios.length);
+    } catch (error) {
+        console.error('Erro ao carregar usuários:', error);
+    }
 }
 
-function editarUsuario(id) {
-  const user = usuarios.find((u) => u.id === id);
-  if (user) {
-    document.getElementById("usuario-id").value = user.id;
-    document.getElementById("usuario-nome").value = user.nome;
-    document.getElementById("usuario-login").value = user.usuario;
-    document.getElementById("usuario-senha").value = "";
-    document.getElementById("usuario-tipo").value = user.tipo;
-  }
+function atualizarTabelaUsuarios() {
+    const tbody = document.getElementById('usuarios-table-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    state.usuarios.forEach(user => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${user.id}</td>
+            <td>${user.nome}</td>
+            <td>${user.usuario}</td>
+            <td>
+                <span class="status-badge" style="background: ${getTipoColor(user.tipo)};">
+                    ${getTipoIcon(user.tipo)} ${user.tipo}
+                </span>
+            </td>
+            <td>${new Date(user.created_at).toLocaleDateString()}</td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn-icon btn-edit" onclick="editarUsuario(${user.id})">✏️</button>
+                    <button class="btn-icon btn-delete" onclick="excluirUsuario(${user.id})" ${user.id === 1 ? 'disabled' : ''}>
+                        🗑️
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
-function excluirUsuario(id) {
-  if (id === 1) {
-    alert("Não é possível excluir o administrador principal!");
-    return;
-  }
-
-  if (confirm("Tem certeza que deseja excluir este usuário?")) {
-    usuarios = usuarios.filter((u) => u.id !== id);
-    carregarUsuarios();
-    mostrarMensagem("Usuário excluído com sucesso!", "sucesso");
-  }
+function getTipoColor(tipo) {
+    switch(tipo) {
+        case 'admin': return '#ffcdd2';
+        case 'garcom': return '#c8e6c9';
+        case 'cozinha': return '#fff3cd';
+        default: return '#e0e0e0';
+    }
 }
 
-function limparFormUsuario() {
-  document.getElementById("usuario-id").value = "";
-  document.getElementById("usuario-nome").value = "";
-  document.getElementById("usuario-login").value = "";
-  document.getElementById("usuario-senha").value = "";
-  document.getElementById("usuario-tipo").value = "garcom";
+function getTipoIcon(tipo) {
+    switch(tipo) {
+        case 'admin': return '⚙️';
+        case 'garcom': return '👨‍🍳';
+        case 'cozinha': return '👩‍🍳';
+        default: return '👤';
+    }
 }
 
-// Funções de Relatório
-function gerarRelatorio() {
-  const data =
-    document.getElementById("data-relatorio").value ||
-    new Date().toISOString().split("T")[0];
+// Evento do formulário de usuário
+document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const usuario = {
+        id: document.getElementById('usuario-id').value,
+        nome: document.getElementById('usuario-nome').value,
+        usuario: document.getElementById('usuario-login').value,
+        tipo: document.getElementById('usuario-tipo').value
+    };
+    
+    const senha = document.getElementById('usuario-senha').value;
+    if (senha) usuario.senha = senha;
+    
+    try {
+        const url = usuario.id ? `/api/usuarios/${usuario.id}` : '/api/usuarios';
+        const method = usuario.id ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(usuario)
+        });
+        
+        if (!response.ok) throw new Error('Erro ao salvar');
+        
+        mostrarNotificacao(`Usuário ${usuario.id ? 'atualizado' : 'criado'}!`, 'success');
+        limparFormUsuario();
+        await carregarUsuarios();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao salvar usuário', 'error');
+    }
+});
 
-  // Simular relatório
-  const relatorioDiv = document.getElementById("relatorio-resultado");
-  relatorioDiv.innerHTML = `
-        <h3>Relatório do dia ${data}</h3>
-        <table class="tabela-cardapio">
-            <tr>
-                <th>Total de Pedidos</th>
-                <td>15</td>
-            </tr>
-            <tr>
-                <th>Faturamento Total</th>
-                <td>R$ 1.234,50</td>
-            </tr>
-            <tr>
-                <th>Pedidos por Mesa</th>
-                <td>Média: 3.2 pedidos/mesa</td>
-            </tr>
-            <tr>
-                <th>Item mais vendido</th>
-                <td>Filé à Parmegiana (8 unidades)</td>
-            </tr>
-        </table>
-    `;
+window.editarUsuario = (id) => {
+    const user = state.usuarios.find(u => u.id === id);
+    if (!user) return;
+    
+    document.getElementById('usuario-id').value = user.id;
+    document.getElementById('usuario-nome').value = user.nome;
+    document.getElementById('usuario-login').value = user.usuario;
+    document.getElementById('usuario-senha').value = '';
+    document.getElementById('usuario-tipo').value = user.tipo;
+    
+    document.querySelector('.form-panel').scrollIntoView({ behavior: 'smooth' });
+};
+
+window.excluirUsuario = async (id) => {
+    if (id === 1) {
+        mostrarNotificacao('Não é possível excluir o admin principal', 'error');
+        return;
+    }
+    
+    if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
+    
+    try {
+        const response = await fetch(`/api/usuarios/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Erro ao excluir');
+        
+        mostrarNotificacao('Usuário excluído!', 'success');
+        await carregarUsuarios();
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao excluir usuário', 'error');
+    }
+};
+
+window.limparFormUsuario = () => {
+    document.getElementById('usuario-id').value = '';
+    document.getElementById('usuario-nome').value = '';
+    document.getElementById('usuario-login').value = '';
+    document.getElementById('usuario-senha').value = '';
+    document.getElementById('usuario-tipo').value = 'garcom';
+};
+
+// ===== ESTATÍSTICAS =====
+async function carregarStats() {
+    try {
+        const response = await fetch('/api/stats');
+        state.stats = await response.json();
+        atualizarStats();
+    } catch (error) {
+        console.error('Erro ao carregar stats:', error);
+    }
 }
 
-// Funções de Configuração
-function salvarConfiguracoes() {
-  const nome = document.getElementById("config-nome").value;
-  const tempo = document.getElementById("config-tempo").value;
-
-  localStorage.setItem("config-nome", nome);
-  localStorage.setItem("config-tempo", tempo);
-
-  mostrarMensagem("Configurações salvas com sucesso!", "sucesso");
+function atualizarStats() {
+    document.getElementById('stats-faturamento').textContent = formatarPreco(state.stats.faturamento || 0);
+    document.getElementById('stats-pedidos').textContent = state.stats.pedidos || 0;
+    document.getElementById('stats-clientes').textContent = state.stats.clientes || 0;
+    document.getElementById('stats-tempo').textContent = state.stats.tempoMedio || 0;
 }
 
-// Função auxiliar para mostrar mensagens
-function mostrarMensagem(texto, tipo) {
-  // Criar elemento de mensagem
-  const msgDiv = document.createElement("div");
-  msgDiv.textContent = texto;
-  msgDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 20px;
-        background: ${tipo === "sucesso" ? "#4CAF50" : "#f44336"};
-        color: white;
-        border-radius: 5px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        z-index: 9999;
-    `;
-
-  document.body.appendChild(msgDiv);
-
-  setTimeout(() => {
-    msgDiv.remove();
-  }, 3000);
+// ===== CONFIGURAÇÕES =====
+async function carregarConfig() {
+    try {
+        const response = await fetch('/api/config');
+        state.config = await response.json();
+        atualizarConfig();
+    } catch (error) {
+        console.error('Erro ao carregar config:', error);
+    }
 }
 
-// Tornar funções globais
-window.editarItem = editarItem;
-window.excluirItem = excluirItem;
-window.editarUsuario = editarUsuario;
-window.excluirUsuario = excluirUsuario;
+function atualizarConfig() {
+    document.getElementById('config-nome').value = state.config.nome_restaurante || 'Meu Restaurante';
+    document.getElementById('config-tempo').value = state.config.tempo_medio || 30;
+    document.getElementById('config-cor-primaria').value = state.config.cores_primaria || '#4CAF50';
+    document.getElementById('config-cor-secundaria').value = state.config.cores_secundaria || '#FF9800';
+}
+
+// Evento do formulário de config
+document.getElementById('form-config')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const config = {
+        nome_restaurante: document.getElementById('config-nome').value,
+        tempo_medio: parseInt(document.getElementById('config-tempo').value),
+        cores_primaria: document.getElementById('config-cor-primaria').value,
+        cores_secundaria: document.getElementById('config-cor-secundaria').value
+    };
+    
+    try {
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        
+        if (!response.ok) throw new Error('Erro ao salvar');
+        
+        mostrarNotificacao('Configurações salvas!', 'success');
+        
+        // Aplicar cores no site
+        document.documentElement.style.setProperty('--primary', config.cores_primaria);
+        document.documentElement.style.setProperty('--secondary', config.cores_secundaria);
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao salvar configurações', 'error');
+    }
+});
+
+// ===== CONFIGURAÇÕES GERAIS =====
+function configurarEventos() {
+    // Tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('ativo'));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('ativo'));
+            
+            btn.classList.add('ativo');
+            document.getElementById(`tab-${btn.dataset.tab}`).classList.add('ativo');
+        });
+    });
+}
+
+function configurarBuscas() {
+    // Busca em categorias
+    document.getElementById('search-categorias')?.addEventListener('input', (e) => {
+        const termo = e.target.value.toLowerCase();
+        const linhas = document.querySelectorAll('#categorias-table-body tr');
+        
+        linhas.forEach(linha => {
+            const texto = linha.textContent.toLowerCase();
+            linha.style.display = texto.includes(termo) ? '' : 'none';
+        });
+    });
+    
+    // Busca em cardápio
+    document.getElementById('search-cardapio')?.addEventListener('input', (e) => {
+        const termo = e.target.value.toLowerCase();
+        const linhas = document.querySelectorAll('#cardapio-table-body tr');
+        
+        linhas.forEach(linha => {
+            const texto = linha.textContent.toLowerCase();
+            linha.style.display = texto.includes(termo) ? '' : 'none';
+        });
+    });
+    
+    // Busca em usuários
+    document.getElementById('search-usuarios')?.addEventListener('input', (e) => {
+        const termo = e.target.value.toLowerCase();
+        const linhas = document.querySelectorAll('#usuarios-table-body tr');
+        
+        linhas.forEach(linha => {
+            const texto = linha.textContent.toLowerCase();
+            linha.style.display = texto.includes(termo) ? '' : 'none';
+        });
+    });
+}
+
+// ===== FUNÇÕES AUXILIARES =====
+function formatarPreco(valor) {
+    return valor.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    });
+}
+
+function mostrarNotificacao(mensagem, tipo = 'info') {
+    const notificacao = document.createElement('div');
+    notificacao.className = `notification ${tipo}`;
+    notificacao.textContent = mensagem;
+    document.body.appendChild(notificacao);
+    
+    setTimeout(() => {
+        notificacao.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notificacao.remove(), 300);
+    }, 3000);
+}
+
+// ===== ATUALIZAÇÃO PERIÓDICA =====
+setInterval(() => {
+    if (document.querySelector('.tab-btn.ativo')?.dataset.tab === 'dashboard') {
+        carregarStats();
+    }
+}, 30000); // A cada 30 segundos
