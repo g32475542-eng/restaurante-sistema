@@ -48,7 +48,6 @@ console.log('📁 Caminho do banco:', dbPath);
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('❌ Erro no banco:', err);
-    console.error('📁 Caminho tentado:', dbPath);
   } else {
     console.log('✅ Banco de dados conectado em:', dbPath);
     criarTabelas();
@@ -123,46 +122,87 @@ function criarTabelas() {
     FOREIGN KEY (pedido_id) REFERENCES pedidos (id)
   )`);
 
-  console.log('✅ Tabelas criadas/verificadas');
+  // Tabela de configurações
+  db.run(`CREATE TABLE IF NOT EXISTS configuracoes (
+    chave TEXT PRIMARY KEY,
+    valor TEXT,
+    tipo TEXT DEFAULT 'texto'
+  )`);
 
+  console.log('✅ Tabelas criadas/verificadas');
+  
   // Inserir dados iniciais
   inserirDadosIniciais();
 }
 
 function inserirDadosIniciais() {
-  // Usuários padrão
+  console.log('👤 Verificando usuários...');
+  
+  // Verificar se já existem usuários
   db.get("SELECT COUNT(*) as count FROM usuarios", [], (err, row) => {
     if (err) {
-      console.error('Erro ao verificar usuários:', err);
+      console.error('❌ Erro ao verificar usuários:', err);
       return;
     }
     
+    console.log(`📊 Usuários encontrados: ${row ? row.count : 0}`);
+    
+    // Se não houver usuários, criar os padrão
     if (!row || row.count === 0) {
-      const senhaAdmin = bcrypt.hashSync('123456', 10);
+      console.log('🔨 Criando usuários padrão...');
       
-      db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['Administrador', 'admin', senhaAdmin, 'admin']);
+      const saltRounds = 10;
+      const senhaAdmin = bcrypt.hashSync('123456', saltRounds);
+      const senhaJoao = bcrypt.hashSync('123456', saltRounds);
+      const senhaMaria = bcrypt.hashSync('123456', saltRounds);
       
-      db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['João Garçom', 'joao', bcrypt.hashSync('123456', 10), 'garcom']);
+      // Inserir admin
+      db.run(
+        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+        ['Administrador', 'admin', senhaAdmin, 'admin'],
+        function(err) {
+          if (err) console.error('❌ Erro ao criar admin:', err);
+          else console.log('✅ Admin criado com ID:', this.lastID);
+        }
+      );
       
-      db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['Maria Cozinha', 'maria', bcrypt.hashSync('123456', 10), 'cozinha']);
+      // Inserir garçom
+      db.run(
+        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+        ['João Garçom', 'joao', senhaJoao, 'garcom'],
+        function(err) {
+          if (err) console.error('❌ Erro ao criar garçom:', err);
+          else console.log('✅ Garçom criado com ID:', this.lastID);
+        }
+      );
       
-      console.log('✅ Usuários padrão criados');
+      // Inserir cozinha
+      db.run(
+        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+        ['Maria Cozinha', 'maria', senhaMaria, 'cozinha'],
+        function(err) {
+          if (err) console.error('❌ Erro ao criar cozinha:', err);
+          else console.log('✅ Cozinha criada com ID:', this.lastID);
+        }
+      );
+      
+      console.log('🎉 Todos os usuários foram criados!');
     } else {
-      console.log('👥 Usuários já existem');
+      console.log('👥 Usuários já existem no banco');
+      
+      // Listar usuários para debug
+      db.all("SELECT id, nome, usuario, tipo FROM usuarios", [], (err, users) => {
+        if (!err && users) {
+          console.log('📋 Usuários no banco:');
+          users.forEach(u => console.log(`   - ${u.usuario} (${u.tipo})`));
+        }
+      });
     }
   });
 
-  // Categorias padrão
+  // Verificar categorias
   db.get("SELECT COUNT(*) as count FROM categorias", [], (err, row) => {
-    if (err) {
-      console.error('Erro ao verificar categorias:', err);
-      return;
-    }
-    
-    if (!row || row.count === 0) {
+    if (!err && (!row || row.count === 0)) {
       const categorias = [
         ['Entradas', '🥗', '#4CAF50', 1],
         ['Pratos', '🍽️', '#FF5722', 2],
@@ -174,25 +214,33 @@ function inserirDadosIniciais() {
         db.run("INSERT INTO categorias (nome, icone, cor, ordem) VALUES (?, ?, ?, ?)", cat);
       });
       console.log('✅ Categorias padrão criadas');
-    } else {
-      console.log('📋 Categorias já existem');
     }
   });
 
-  // Mesas padrão
+  // Verificar mesas
   db.get("SELECT COUNT(*) as count FROM mesas", [], (err, row) => {
-    if (err) {
-      console.error('Erro ao verificar mesas:', err);
-      return;
-    }
-    
-    if (!row || row.count === 0) {
+    if (!err && (!row || row.count === 0)) {
       for (let i = 1; i <= 20; i++) {
         db.run("INSERT INTO mesas (numero, status) VALUES (?, ?)", [i, 'livre']);
       }
       console.log('✅ Mesas padrão criadas');
-    } else {
-      console.log('🪑 Mesas já existem');
+    }
+  });
+
+  // Configurações padrão
+  db.get("SELECT COUNT(*) as count FROM configuracoes", [], (err, row) => {
+    if (!err && (!row || row.count === 0)) {
+      const configs = [
+        ['nome_restaurante', 'Meu Restaurante'],
+        ['tempo_medio', '30'],
+        ['cor_primaria', '#4CAF50'],
+        ['cor_secundaria', '#FF9800']
+      ];
+      
+      configs.forEach(cfg => {
+        db.run("INSERT INTO configuracoes (chave, valor) VALUES (?, ?)", cfg);
+      });
+      console.log('✅ Configurações padrão criadas');
     }
   });
 }
@@ -201,23 +249,29 @@ function inserirDadosIniciais() {
 app.post('/api/login', (req, res) => {
   const { usuario, senha } = req.body;
   
+  console.log(`🔐 Tentativa de login: ${usuario}`);
+  
   if (!usuario || !senha) {
     return res.status(400).json({ erro: 'Usuário e senha são obrigatórios' });
   }
   
   db.get("SELECT * FROM usuarios WHERE usuario = ?", [usuario], (err, user) => {
     if (err) {
-      console.error('Erro no banco:', err);
+      console.error('❌ Erro no banco:', err);
       return res.status(500).json({ erro: 'Erro interno do servidor' });
     }
     
     if (!user) {
+      console.log(`❌ Usuário não encontrado: ${usuario}`);
       return res.status(401).json({ erro: 'Usuário ou senha inválidos' });
     }
+    
+    console.log(`👤 Usuário encontrado: ${user.nome} (${user.tipo})`);
     
     const senhaValida = bcrypt.compareSync(senha, user.senha);
     
     if (!senhaValida) {
+      console.log(`❌ Senha inválida para: ${usuario}`);
       return res.status(401).json({ erro: 'Usuário ou senha inválidos' });
     }
     
@@ -225,7 +279,7 @@ app.post('/api/login', (req, res) => {
     req.session.userTipo = user.tipo;
     req.session.userNome = user.nome;
     
-    console.log(`✅ Login: ${user.nome} (${user.tipo})`);
+    console.log(`✅ Login bem-sucedido: ${user.nome} (${user.tipo})`);
     
     res.json({
       id: user.id,
@@ -252,6 +306,14 @@ app.get('/api/me', (req, res) => {
       return res.status(401).json({ erro: 'Usuário não encontrado' });
     }
     res.json(user);
+  });
+});
+
+// ROTA DE DEBUG - PARA TESTAR (remover depois)
+app.get('/api/debug/usuarios', (req, res) => {
+  db.all("SELECT id, nome, usuario, tipo FROM usuarios", [], (err, rows) => {
+    if (err) return res.status(500).json({ erro: err.message });
+    res.json(rows);
   });
 });
 
@@ -286,32 +348,6 @@ app.post('/api/categorias', verificarAdmin, (req, res) => {
   );
 });
 
-app.put('/api/categorias/:id', verificarAdmin, (req, res) => {
-  const { nome, icone, cor, ordem, ativo } = req.body;
-  
-  db.run(
-    "UPDATE categorias SET nome = ?, icone = ?, cor = ?, ordem = ?, ativo = ? WHERE id = ?",
-    [nome, icone, cor, ordem, ativo, req.params.id],
-    function(err) {
-      if (err) {
-        console.error('Erro ao atualizar categoria:', err);
-        return res.status(500).json({ erro: 'Erro ao atualizar categoria' });
-      }
-      res.json({ ok: true });
-    }
-  );
-});
-
-app.delete('/api/categorias/:id', verificarAdmin, (req, res) => {
-  db.run("DELETE FROM categorias WHERE id = ?", [req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao deletar categoria:', err);
-      return res.status(500).json({ erro: 'Erro ao deletar categoria' });
-    }
-    res.json({ ok: true });
-  });
-});
-
 // ========== ROTAS DO CARDÁPIO ==========
 app.get('/api/cardapio', (req, res) => {
   db.all(`
@@ -328,52 +364,6 @@ app.get('/api/cardapio', (req, res) => {
   });
 });
 
-app.post('/api/cardapio', verificarAdmin, (req, res) => {
-  const { nome, preco, categoria_id, descricao, tempo_preparo } = req.body;
-  
-  if (!nome || !preco || !categoria_id) {
-    return res.status(400).json({ erro: 'Nome, preço e categoria são obrigatórios' });
-  }
-  
-  db.run(
-    "INSERT INTO cardapio (nome, preco, categoria_id, descricao, tempo_preparo) VALUES (?, ?, ?, ?, ?)",
-    [nome, preco, categoria_id, descricao || '', tempo_preparo || 15],
-    function(err) {
-      if (err) {
-        console.error('Erro ao criar item:', err);
-        return res.status(500).json({ erro: 'Erro ao criar item' });
-      }
-      res.json({ id: this.lastID, ...req.body });
-    }
-  );
-});
-
-app.put('/api/cardapio/:id', verificarAdmin, (req, res) => {
-  const { nome, preco, categoria_id, descricao, disponivel, tempo_preparo } = req.body;
-  
-  db.run(
-    "UPDATE cardapio SET nome = ?, preco = ?, categoria_id = ?, descricao = ?, disponivel = ?, tempo_preparo = ? WHERE id = ?",
-    [nome, preco, categoria_id, descricao, disponivel, tempo_preparo, req.params.id],
-    function(err) {
-      if (err) {
-        console.error('Erro ao atualizar item:', err);
-        return res.status(500).json({ erro: 'Erro ao atualizar item' });
-      }
-      res.json({ ok: true });
-    }
-  );
-});
-
-app.delete('/api/cardapio/:id', verificarAdmin, (req, res) => {
-  db.run("DELETE FROM cardapio WHERE id = ?", [req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao deletar item:', err);
-      return res.status(500).json({ erro: 'Erro ao deletar item' });
-    }
-    res.json({ ok: true });
-  });
-});
-
 // ========== ROTAS DE MESAS ==========
 app.get('/api/mesas', (req, res) => {
   db.all("SELECT * FROM mesas ORDER BY numero", [], (err, rows) => {
@@ -385,32 +375,6 @@ app.get('/api/mesas', (req, res) => {
   });
 });
 
-app.post('/api/mesas', verificarAdmin, (req, res) => {
-  const { numero } = req.body;
-  
-  if (!numero) {
-    return res.status(400).json({ erro: 'Número da mesa é obrigatório' });
-  }
-  
-  db.run("INSERT INTO mesas (numero) VALUES (?)", [numero], function(err) {
-    if (err) {
-      console.error('Erro ao criar mesa:', err);
-      return res.status(500).json({ erro: 'Erro ao criar mesa' });
-    }
-    res.json({ id: this.lastID, numero, status: 'livre' });
-  });
-});
-
-app.delete('/api/mesas/:id', verificarAdmin, (req, res) => {
-  db.run("DELETE FROM mesas WHERE id = ?", [req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao deletar mesa:', err);
-      return res.status(500).json({ erro: 'Erro ao deletar mesa' });
-    }
-    res.json({ ok: true });
-  });
-});
-
 // ========== ROTAS DE USUÁRIOS ==========
 app.get('/api/usuarios', verificarAdmin, (req, res) => {
   db.all("SELECT id, nome, usuario, tipo, created_at FROM usuarios ORDER BY id", [], (err, rows) => {
@@ -419,66 +383,6 @@ app.get('/api/usuarios', verificarAdmin, (req, res) => {
       return res.status(500).json({ erro: 'Erro ao buscar usuários' });
     }
     res.json(rows);
-  });
-});
-
-app.post('/api/usuarios', verificarAdmin, (req, res) => {
-  const { nome, usuario, senha, tipo } = req.body;
-  
-  if (!nome || !usuario || !senha || !tipo) {
-    return res.status(400).json({ erro: 'Todos os campos são obrigatórios' });
-  }
-  
-  const senhaHash = bcrypt.hashSync(senha, 10);
-  
-  db.run(
-    "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-    [nome, usuario, senhaHash, tipo],
-    function(err) {
-      if (err) {
-        console.error('Erro ao criar usuário:', err);
-        return res.status(500).json({ erro: 'Erro ao criar usuário' });
-      }
-      res.json({ id: this.lastID, nome, usuario, tipo });
-    }
-  );
-});
-
-app.put('/api/usuarios/:id', verificarAdmin, (req, res) => {
-  const { nome, usuario, senha, tipo } = req.body;
-  const id = req.params.id;
-  
-  let query, params;
-  
-  if (senha) {
-    const senhaHash = bcrypt.hashSync(senha, 10);
-    query = "UPDATE usuarios SET nome = ?, usuario = ?, senha = ?, tipo = ? WHERE id = ?";
-    params = [nome, usuario, senhaHash, tipo, id];
-  } else {
-    query = "UPDATE usuarios SET nome = ?, usuario = ?, tipo = ? WHERE id = ?";
-    params = [nome, usuario, tipo, id];
-  }
-  
-  db.run(query, params, function(err) {
-    if (err) {
-      console.error('Erro ao atualizar usuário:', err);
-      return res.status(500).json({ erro: 'Erro ao atualizar usuário' });
-    }
-    res.json({ ok: true });
-  });
-});
-
-app.delete('/api/usuarios/:id', verificarAdmin, (req, res) => {
-  if (req.params.id === '1') {
-    return res.status(400).json({ erro: 'Não é possível excluir o administrador principal' });
-  }
-  
-  db.run("DELETE FROM usuarios WHERE id = ?", [req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao deletar usuário:', err);
-      return res.status(500).json({ erro: 'Erro ao deletar usuário' });
-    }
-    res.json({ ok: true });
   });
 });
 
@@ -515,119 +419,11 @@ app.post('/api/pedidos', (req, res) => {
       db.run("UPDATE mesas SET status = 'ocupada' WHERE id = ?", [pedido.mesa]);
       
       // Emitir via socket
-      io.emit('novo-pedido', { ...pedido, id: pedidoId, created_at: new Date() });
+      io.emit('novo-pedido', { ...pedido, id: pedidoId });
       
       res.json({ id: pedidoId, ok: true });
     }
   );
-});
-
-app.get('/api/pedidos/pendentes', (req, res) => {
-  db.all(`
-    SELECT p.*, m.numero as mesa_numero, u.nome as garcom_nome
-    FROM pedidos p
-    JOIN mesas m ON p.mesa_id = m.id
-    LEFT JOIN usuarios u ON p.garcom_id = u.id
-    WHERE p.status IN ('pendente', 'preparando')
-    ORDER BY p.created_at DESC
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar pedidos:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar pedidos' });
-    }
-    res.json(rows);
-  });
-});
-
-app.get('/api/pedidos/prontos', (req, res) => {
-  db.all(`
-    SELECT p.*, m.numero as mesa_numero
-    FROM pedidos p
-    JOIN mesas m ON p.mesa_id = m.id
-    WHERE p.status = 'pronto'
-    ORDER BY p.created_at DESC
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar pedidos prontos:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar pedidos' });
-    }
-    res.json(rows);
-  });
-});
-
-app.post('/api/pedidos/:id/entregar', (req, res) => {
-  const pedidoId = req.params.id;
-  
-  db.run("UPDATE pedidos SET status = 'entregue', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [pedidoId], function(err) {
-    if (err) {
-      console.error('Erro ao entregar pedido:', err);
-      return res.status(500).json({ erro: 'Erro ao entregar pedido' });
-    }
-    
-    // Pegar mesa_id para liberar a mesa
-    db.get("SELECT mesa_id FROM pedidos WHERE id = ?", [pedidoId], (err, row) => {
-      if (row) {
-        db.run("UPDATE mesas SET status = 'livre' WHERE id = ?", [row.mesa_id]);
-      }
-    });
-    
-    io.emit('pedido-entregue', pedidoId);
-    res.json({ ok: true });
-  });
-});
-
-// ========== ROTAS DE ESTATÍSTICAS ==========
-app.get('/api/stats', verificarAdmin, (req, res) => {
-  db.all(`
-    SELECT 
-      COUNT(*) as total_pedidos,
-      SUM(total) as faturamento,
-      COUNT(DISTINCT mesa_id) as clientes
-    FROM pedidos 
-    WHERE date(created_at) = date('now')
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar stats:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar estatísticas' });
-    }
-    
-    res.json({
-      faturamento: rows[0]?.faturamento || 0,
-      pedidos: rows[0]?.total_pedidos || 0,
-      clientes: rows[0]?.clientes || 0,
-      tempoMedio: 30
-    });
-  });
-});
-
-// ========== ROTAS DE CONFIGURAÇÕES ==========
-app.get('/api/config', (req, res) => {
-  db.all("SELECT chave, valor FROM configuracoes", [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar config:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar configurações' });
-    }
-    
-    const config = {};
-    rows.forEach(row => {
-      config[row.chave] = row.valor;
-    });
-    
-    res.json(config);
-  });
-});
-
-app.post('/api/config', verificarAdmin, (req, res) => {
-  const configs = req.body;
-  
-  const stmt = db.prepare("INSERT OR REPLACE INTO configuracoes (chave, valor) VALUES (?, ?)");
-  
-  Object.entries(configs).forEach(([chave, valor]) => {
-    stmt.run([chave, valor.toString()]);
-  });
-  
-  stmt.finalize();
-  res.json({ ok: true });
 });
 
 // ========== MIDDLEWARE DE ADMIN ==========
@@ -647,15 +443,6 @@ function verificarAdmin(req, res, next) {
 // ========== SOCKET.IO ==========
 io.on('connection', (socket) => {
   console.log('🔌 Cliente conectado:', socket.id);
-
-  socket.on('solicitar-pedidos', () => {
-    db.all("SELECT * FROM pedidos WHERE status IN ('pendente', 'preparando', 'pronto') ORDER BY created_at DESC", 
-    [], (err, rows) => {
-      if (!err) {
-        socket.emit('pedidos-ativos', rows);
-      }
-    });
-  });
 
   socket.on('iniciar-preparo', (pedidoId) => {
     console.log('🔨 Iniciar preparo:', pedidoId);
@@ -701,5 +488,9 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`\n🚀 SERVIDOR RODANDO NA PORTA ${PORT}`);
   console.log(`📱 Local: http://localhost:${PORT}`);
-  console.log(`🌐 Render: https://restaurante-sistema-0kyy.onrender.com\n`);
+  console.log(`🌐 Render: https://restaurante-sistema-0kyy.onrender.com`);
+  console.log(`\n🔐 Credenciais padrão:`);
+  console.log(`   Admin:  admin / 123456`);
+  console.log(`   Garçom: joao / 123456`);
+  console.log(`   Cozinha: maria / 123456\n`);
 });
