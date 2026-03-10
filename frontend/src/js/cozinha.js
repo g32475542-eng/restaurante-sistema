@@ -5,48 +5,16 @@ let pedidos = {
     prontos: []
 };
 
-let audioContext = null;
-let notificacaoAudio = null;
-
 // ===== INICIALIZAÇÃO =====
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Inicializando painel da cozinha...');
+    console.log('🚀 Inicializando cozinha...');
     
     atualizarRelogio();
     setInterval(atualizarRelogio, 1000);
     
     setupSocket();
-    inicializarAudio();
-    carregarPedidosIniciais();
+    adicionarEstilosGlobais();
 });
-
-// ===== ÁUDIO DE NOTIFICAÇÃO =====
-function inicializarAudio() {
-    try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // Criar som simples para notificação
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.value = 880;
-        gainNode.gain.value = 0.1;
-        
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + 0.1);
-    } catch (e) {
-        console.log('Áudio não suportado:', e);
-    }
-}
-
-function tocarNotificacao() {
-    if (audioContext && audioContext.state === 'suspended') {
-        audioContext.resume();
-    }
-}
 
 // ===== SOCKET.IO =====
 function setupSocket() {
@@ -63,17 +31,36 @@ function setupSocket() {
         socket.emit('solicitar-pedidos');
     });
     
+    socket.on('pedidos-ativos', (dados) => {
+        console.log('📋 Pedidos ativos recebidos:', dados);
+        
+        // Garantir que dados existe e tem a estrutura correta
+        if (dados && Array.isArray(dados)) {
+            // Separar pedidos por status
+            pedidos.pendentes = dados.filter(p => p && p.status === 'pendente') || [];
+            pedidos.preparando = dados.filter(p => p && p.status === 'preparando') || [];
+            pedidos.prontos = dados.filter(p => p && p.status === 'pronto') || [];
+        } else {
+            console.log('📋 Nenhum pedido ativo');
+            pedidos.pendentes = [];
+            pedidos.preparando = [];
+            pedidos.prontos = [];
+        }
+        
+        atualizarColunas();
+    });
+    
     socket.on('novo-pedido', (pedido) => {
         console.log('📦 Novo pedido recebido:', pedido);
         
-        // Verificar se já existe
-        const existe = pedidos.pendentes.some(p => p.id === pedido.id);
+        if (!pedido || !pedido.id) return;
+        
+        // Verificar se já não existe
+        const existe = pedidos.pendentes.some(p => p && p.id === pedido.id);
         if (!existe) {
             pedidos.pendentes.unshift(pedido);
             atualizarColunas();
             
-            // Notificações
-            tocarNotificacao();
             mostrarNotificacao(`🔔 Novo pedido - Mesa ${pedido.mesa}!`, 'info');
             
             // Piscar tela
@@ -81,24 +68,16 @@ function setupSocket() {
             setTimeout(() => {
                 document.body.style.backgroundColor = '';
             }, 200);
-            
-            // Destacar card
-            setTimeout(() => {
-                const card = document.querySelector(`[data-pedido-id="${pedido.id}"]`);
-                if (card) {
-                    card.style.animation = 'pulse 0.5s ease';
-                    setTimeout(() => {
-                        card.style.animation = '';
-                    }, 500);
-                }
-            }, 100);
         }
     });
     
     socket.on('pedido-em-preparo', (pedidoId) => {
         console.log('🔨 Pedido em preparo:', pedidoId);
         
-        const index = pedidos.pendentes.findIndex(p => p.id === pedidoId);
+        if (!pedidoId) return;
+        
+        // Mover de pendentes para preparando
+        const index = pedidos.pendentes.findIndex(p => p && p.id === pedidoId);
         if (index !== -1) {
             const pedido = pedidos.pendentes[index];
             pedido.status = 'preparando';
@@ -107,14 +86,17 @@ function setupSocket() {
             pedidos.pendentes.splice(index, 1);
             pedidos.preparando.push(pedido);
             atualizarColunas();
+            mostrarNotificacao(`🔨 Pedido Mesa ${pedido.mesa} em preparo`, 'info');
         }
     });
     
     socket.on('pedido-para-entrega', (pedidoId) => {
         console.log('✅ Pedido pronto:', pedidoId);
         
+        if (!pedidoId) return;
+        
         // Procurar em preparando
-        const index = pedidos.preparando.findIndex(p => p.id === pedidoId);
+        const index = pedidos.preparando.findIndex(p => p && p.id === pedidoId);
         if (index !== -1) {
             const pedido = pedidos.preparando[index];
             pedido.status = 'pronto';
@@ -123,37 +105,29 @@ function setupSocket() {
             pedidos.preparando.splice(index, 1);
             pedidos.prontos.push(pedido);
             atualizarColunas();
-            
-            mostrarNotificacao(`✅ Pedido da mesa ${pedido.mesa} pronto!`, 'success');
+            mostrarNotificacao(`✅ Pedido Mesa ${pedido.mesa} pronto!`, 'success');
         }
     });
     
-    socket.on('pedidos-ativos', (dados) => {
-        console.log('📋 Pedidos ativos recebidos:', dados);
-        pedidos = dados || { pendentes: [], preparando: [], prontos: [] };
-        atualizarColunas();
+    socket.on('pedido-entregue', (pedidoId) => {
+        console.log('🍽️ Pedido entregue:', pedidoId);
+        
+        if (!pedidoId) return;
+        
+        const index = pedidos.prontos.findIndex(p => p && p.id === pedidoId);
+        if (index !== -1) {
+            pedidos.prontos.splice(index, 1);
+            atualizarColunas();
+        }
+    });
+    
+    socket.on('disconnect', () => {
+        console.log('❌ Desconectado do servidor');
+        mostrarNotificacao('Desconectado do servidor', 'error');
     });
 }
 
-// ===== CARREGAR PEDIDOS INICIAIS =====
-async function carregarPedidosIniciais() {
-    try {
-        const response = await fetch('/api/pedidos/pendentes');
-        const dados = await response.json();
-        
-        // Organizar por status
-        pedidos.pendentes = dados.filter(p => p.status === 'pendente');
-        pedidos.preparando = dados.filter(p => p.status === 'preparando');
-        pedidos.prontos = dados.filter(p => p.status === 'pronto');
-        
-        atualizarColunas();
-        console.log('📋 Pedidos carregados:', pedidos);
-    } catch (error) {
-        console.error('Erro ao carregar pedidos:', error);
-    }
-}
-
-// ===== ATUALIZAR INTERFACE =====
+// ===== ATUALIZAR COLUNAS =====
 function atualizarColunas() {
     atualizarColunaPendentes();
     atualizarColunaPreparando();
@@ -167,18 +141,19 @@ function atualizarColunaPendentes() {
     
     coluna.innerHTML = '';
     
-    if (pedidos.pendentes.length === 0) {
+    if (!pedidos.pendentes || pedidos.pendentes.length === 0) {
         coluna.innerHTML = '<div class="vazio-message">📭 Nenhum pedido pendente</div>';
         return;
     }
     
     // Ordenar por hora (mais recentes primeiro)
-    const ordenados = [...pedidos.pendentes].sort((a, b) => 
-        new Date(b.created_at) - new Date(a.created_at)
-    );
+    const ordenados = [...pedidos.pendentes].sort((a, b) => {
+        if (!a || !b) return 0;
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
     
     ordenados.forEach(pedido => {
-        coluna.appendChild(criarCardPedido(pedido, 'pendente'));
+        if (pedido) coluna.appendChild(criarCardPedido(pedido, 'pendente'));
     });
 }
 
@@ -188,13 +163,13 @@ function atualizarColunaPreparando() {
     
     coluna.innerHTML = '';
     
-    if (pedidos.preparando.length === 0) {
+    if (!pedidos.preparando || pedidos.preparando.length === 0) {
         coluna.innerHTML = '<div class="vazio-message">🔨 Nenhum pedido em preparo</div>';
         return;
     }
     
     pedidos.preparando.forEach(pedido => {
-        coluna.appendChild(criarCardPedido(pedido, 'preparando'));
+        if (pedido) coluna.appendChild(criarCardPedido(pedido, 'preparando'));
     });
 }
 
@@ -204,37 +179,50 @@ function atualizarColunaProntos() {
     
     coluna.innerHTML = '';
     
-    if (pedidos.prontos.length === 0) {
+    if (!pedidos.prontos || pedidos.prontos.length === 0) {
         coluna.innerHTML = '<div class="vazio-message">✅ Nenhum pedido pronto</div>';
         return;
     }
     
     pedidos.prontos.forEach(pedido => {
-        coluna.appendChild(criarCardPedido(pedido, 'pronto'));
+        if (pedido) coluna.appendChild(criarCardPedido(pedido, 'pronto'));
     });
 }
 
 function atualizarContadores() {
-    document.getElementById('pedidos-pendentes').textContent = `⏳ Pendentes: ${pedidos.pendentes.length}`;
-    document.getElementById('pedidos-preparando').textContent = `🔨 Preparando: ${pedidos.preparando.length}`;
-    document.getElementById('pedidos-prontos').textContent = `✅ Prontos: ${pedidos.prontos.length}`;
+    const pendentesEl = document.getElementById('pedidos-pendentes');
+    const preparandoEl = document.getElementById('pedidos-preparando');
+    const prontosEl = document.getElementById('pedidos-prontos');
     
-    document.getElementById('pendentes-count').textContent = pedidos.pendentes.length;
-    document.getElementById('preparando-count').textContent = pedidos.preparando.length;
-    document.getElementById('prontos-count').textContent = pedidos.prontos.length;
+    const pendentesCount = pedidos.pendentes?.length || 0;
+    const preparandoCount = pedidos.preparando?.length || 0;
+    const prontosCount = pedidos.prontos?.length || 0;
+    
+    if (pendentesEl) pendentesEl.textContent = `⏳ Pendentes: ${pendentesCount}`;
+    if (preparandoEl) preparandoEl.textContent = `🔨 Preparando: ${preparandoCount}`;
+    if (prontosEl) prontosEl.textContent = `✅ Prontos: ${prontosCount}`;
+    
+    document.getElementById('pendentes-count').textContent = pendentesCount;
+    document.getElementById('preparando-count').textContent = preparandoCount;
+    document.getElementById('prontos-count').textContent = prontosCount;
 }
 
 function atualizarRelogio() {
     const agora = new Date();
     const hora = agora.toLocaleTimeString('pt-BR');
-    document.getElementById('hora-atual').textContent = `🕐 ${hora}`;
+    const relogio = document.getElementById('hora-atual');
+    if (relogio) {
+        relogio.textContent = `🕐 ${hora}`;
+    }
 }
 
 // ===== CRIAR CARD DO PEDIDO =====
 function criarCardPedido(pedido, status) {
+    if (!pedido) return document.createElement('div');
+    
     const card = document.createElement('div');
     card.className = `pedido-card ${status}`;
-    card.dataset.pedidoId = pedido.id;
+    card.dataset.pedidoId = pedido.id || '';
     
     const tempo = calcularTempoPedido(pedido.created_at);
     const tempoClass = tempo.includes('⚠️') ? 'tempo-pedido atrasado' : 'tempo-pedido';
@@ -243,10 +231,13 @@ function criarCardPedido(pedido, status) {
     let itensHtml = '';
     if (pedido.itens && pedido.itens.length > 0) {
         pedido.itens.forEach(item => {
+            if (!item) return;
+            const qtd = item.quantidade || 1;
+            const preco = item.preco || 0;
             itensHtml += `
                 <div class="item">
-                    <span>${item.quantidade}x ${item.nome}</span>
-                    <span>${formatarPreco(item.preco * item.quantidade)}</span>
+                    <span>${qtd}x ${item.nome || 'Item'}</span>
+                    <span>R$ ${(preco * qtd).toFixed(2)}</span>
                 </div>
             `;
         });
@@ -281,7 +272,7 @@ function criarCardPedido(pedido, status) {
     } else if (status === 'pronto') {
         botoesHtml = `
             <div class="acoes-pedido">
-                <span style="flex:1; text-align:center; color: var(--success); font-weight:600;">
+                <span style="flex:1; text-align:center; color: #4CAF50; font-weight:600;">
                     ⏰ Aguardando garçom
                 </span>
             </div>
@@ -290,7 +281,7 @@ function criarCardPedido(pedido, status) {
     
     card.innerHTML = `
         <div class="pedido-header">
-            <span class="mesa-numero">Mesa ${pedido.mesa_numero || pedido.mesa}</span>
+            <span class="mesa-numero">Mesa ${pedido.mesa_numero || pedido.mesa || '?'}</span>
             <span class="${tempoClass}">⏱️ ${tempo}</span>
         </div>
         <div class="pedido-info">
@@ -310,37 +301,89 @@ function criarCardPedido(pedido, status) {
 function calcularTempoPedido(dataPedido) {
     if (!dataPedido) return '0 min';
     
-    const agora = new Date();
-    const pedidoTime = new Date(dataPedido);
-    const diffMs = agora - pedidoTime;
-    const diffMin = Math.floor(diffMs / 60000);
+    try {
+        const agora = new Date();
+        const pedidoTime = new Date(dataPedido);
+        const diffMs = agora - pedidoTime;
+        const diffMin = Math.floor(diffMs / 60000);
+        
+        if (diffMin < 1) return 'Agora';
+        if (diffMin === 1) return '1 min';
+        if (diffMin > 20) return `${diffMin} min ⚠️`;
+        return `${diffMin} min`;
+    } catch (e) {
+        return '0 min';
+    }
+}
+
+// ===== FUNÇÕES AUXILIARES =====
+function adicionarEstilosGlobais() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .vazio-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+            background: white;
+            border-radius: 8px;
+            border: 2px dashed #ddd;
+            margin: 10px 0;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            animation: slideIn 0.3s ease;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .notification.success { background: #4CAF50; }
+        .notification.error { background: #f44336; }
+        .notification.info { background: #FF9800; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function mostrarNotificacao(mensagem, tipo = 'info') {
+    const notificacoesAntigas = document.querySelectorAll('.notification');
+    notificacoesAntigas.forEach(n => n.remove());
     
-    if (diffMin < 1) return 'Agora';
-    if (diffMin === 1) return '1 min';
-    if (diffMin > 20) return `${diffMin} min ⚠️`;
-    return `${diffMin} min`;
+    const notificacao = document.createElement('div');
+    notificacao.className = `notification ${tipo}`;
+    notificacao.textContent = mensagem;
+    document.body.appendChild(notificacao);
+    
+    setTimeout(() => {
+        notificacao.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notificacao.remove(), 300);
+    }, 3000);
 }
 
 // ===== AÇÕES DOS PEDIDOS =====
 window.iniciarPreparo = (pedidoId) => {
+    if (!pedidoId) return;
     console.log('▶️ Iniciar preparo:', pedidoId);
     
     if (typeof socket !== 'undefined') {
         socket.emit('iniciar-preparo', pedidoId);
         mostrarNotificacao('Preparo iniciado!', 'info');
-        
-        // Feedback visual
-        const card = document.querySelector(`[data-pedido-id="${pedidoId}"]`);
-        if (card) {
-            card.style.background = '#fff3cd';
-            setTimeout(() => {
-                card.style.background = '';
-            }, 300);
-        }
     }
 };
 
 window.finalizarPreparo = (pedidoId) => {
+    if (!pedidoId) return;
     console.log('✅ Finalizar preparo:', pedidoId);
     
     if (typeof socket !== 'undefined') {
@@ -354,27 +397,24 @@ document.addEventListener('keydown', (e) => {
     // F5 para recarregar pedidos
     if (e.key === 'F5') {
         e.preventDefault();
-        carregarPedidosIniciais();
-        mostrarNotificacao('Pedidos recarregados', 'info');
-    }
-    
-    // Ctrl+Space para testar notificação
-    if (e.ctrlKey && e.code === 'Space') {
-        e.preventDefault();
-        mostrarNotificacao('🔔 Notificação de teste!', 'info');
-        tocarNotificacao();
+        if (typeof socket !== 'undefined') {
+            socket.emit('solicitar-pedidos');
+            mostrarNotificacao('Pedidos recarregados', 'info');
+        }
     }
 });
 
 // ===== LIMPEZA DE PEDIDOS ANTIGOS =====
 setInterval(() => {
-    // Remover pedidos prontos com mais de 30 minutos
-    const trintaMinutosAtras = new Date(Date.now() - 30 * 60000);
-    
-    pedidos.prontos = pedidos.prontos.filter(pedido => {
-        const dataPedido = new Date(pedido.created_at);
-        return dataPedido > trintaMinutosAtras;
-    });
-    
-    atualizarColunaProntos();
-}, 60000); // A cada minuto
+    if (pedidos.prontos && pedidos.prontos.length > 0) {
+        const trintaMinutosAtras = new Date(Date.now() - 30 * 60000);
+        
+        pedidos.prontos = pedidos.prontos.filter(pedido => {
+            if (!pedido || !pedido.created_at) return true;
+            const dataPedido = new Date(pedido.created_at);
+            return dataPedido > trintaMinutosAtras;
+        });
+        
+        atualizarColunaProntos();
+    }
+}, 60000);
