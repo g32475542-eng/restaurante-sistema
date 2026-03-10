@@ -16,7 +16,6 @@ let state = {
 // ===== INICIALIZAÇÃO =====
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Inicializando painel administrativo...');
-    
     carregarTudo();
     configurarEventos();
     configurarBuscas();
@@ -33,7 +32,6 @@ async function carregarTudo() {
             carregarStats(),
             carregarConfig()
         ]);
-        
         console.log('✅ Todos os dados carregados');
         mostrarNotificacao('Dados carregados com sucesso!', 'success');
     } catch (error) {
@@ -111,11 +109,17 @@ function atualizarSelectCategorias() {
 document.getElementById('form-categoria')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
+    const nome = document.getElementById('cat-nome')?.value;
+    if (!nome) {
+        mostrarNotificacao('Nome da categoria é obrigatório!', 'error');
+        return;
+    }
+    
     const categoria = {
-        nome: document.getElementById('cat-nome').value,
-        icone: document.getElementById('cat-icone').value || '📋',
-        cor: document.getElementById('cat-cor').value,
-        ordem: parseInt(document.getElementById('cat-ordem').value) || 0
+        nome: nome,
+        icone: document.getElementById('cat-icone')?.value || '📋',
+        cor: document.getElementById('cat-cor')?.value || '#4CAF50',
+        ordem: parseInt(document.getElementById('cat-ordem')?.value) || 0
     };
     
     try {
@@ -125,14 +129,17 @@ document.getElementById('form-categoria')?.addEventListener('submit', async (e) 
             body: JSON.stringify(categoria)
         });
         
-        if (!response.ok) throw new Error('Erro ao salvar');
+        if (!response.ok) {
+            const erro = await response.json();
+            throw new Error(erro.erro || 'Erro ao salvar');
+        }
         
         mostrarNotificacao('Categoria criada com sucesso!', 'success');
         limparFormCategoria();
         await carregarCategorias();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao criar categoria', 'error');
+        mostrarNotificacao('Erro ao criar categoria: ' + error.message, 'error');
     }
 });
 
@@ -145,7 +152,6 @@ window.editarCategoria = (id) => {
     document.getElementById('cat-cor').value = cat.cor || '#4CAF50';
     document.getElementById('cat-ordem').value = cat.ordem || 0;
     
-    // Rolar para o formulário
     document.querySelector('.form-panel').scrollIntoView({ behavior: 'smooth' });
 };
 
@@ -221,7 +227,7 @@ function atualizarTabelaCardapio() {
             <td>${item.id}</td>
             <td>${item.nome}</td>
             <td>${categoria ? `${categoria.icone} ${categoria.nome}` : 'Sem categoria'}</td>
-            <td>${formatarPreco(item.preco)}</td>
+            <td>R$ ${parseFloat(item.preco).toFixed(2)}</td>
             <td>${item.tempo_preparo || 15} min</td>
             <td>
                 <span class="status-badge ${item.disponivel ? 'ativo' : 'inativo'}">
@@ -246,13 +252,22 @@ function atualizarTabelaCardapio() {
 document.getElementById('form-item')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
+    const nome = document.getElementById('item-nome')?.value;
+    const preco = document.getElementById('item-preco')?.value;
+    const categoria_id = document.getElementById('item-categoria')?.value;
+    
+    if (!nome || !preco || !categoria_id) {
+        mostrarNotificacao('Nome, preço e categoria são obrigatórios!', 'error');
+        return;
+    }
+    
     const item = {
-        id: document.getElementById('item-id').value,
-        nome: document.getElementById('item-nome').value,
-        preco: parseFloat(document.getElementById('item-preco').value),
-        categoria_id: parseInt(document.getElementById('item-categoria').value),
-        descricao: document.getElementById('item-descricao').value,
-        tempo_preparo: parseInt(document.getElementById('item-tempo').value) || 15
+        id: document.getElementById('item-id')?.value,
+        nome: nome,
+        preco: parseFloat(preco),
+        categoria_id: parseInt(categoria_id),
+        descricao: document.getElementById('item-descricao')?.value || '',
+        tempo_preparo: parseInt(document.getElementById('item-tempo')?.value) || 15
     };
     
     try {
@@ -265,14 +280,17 @@ document.getElementById('form-item')?.addEventListener('submit', async (e) => {
             body: JSON.stringify(item)
         });
         
-        if (!response.ok) throw new Error('Erro ao salvar');
+        if (!response.ok) {
+            const erro = await response.json();
+            throw new Error(erro.erro || 'Erro ao salvar');
+        }
         
         mostrarNotificacao(`Item ${item.id ? 'atualizado' : 'criado'} com sucesso!`, 'success');
         limparFormItem();
         await carregarCardapio();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao salvar item', 'error');
+        mostrarNotificacao('Erro ao salvar item: ' + error.message, 'error');
     }
 });
 
@@ -383,25 +401,31 @@ function atualizarGridMesas() {
 document.getElementById('form-mesa')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const mesa = {
-        numero: parseInt(document.getElementById('mesa-numero').value)
-    };
+    const numero = document.getElementById('mesa-numero')?.value;
+    
+    if (!numero) {
+        mostrarNotificacao('Número da mesa é obrigatório!', 'error');
+        return;
+    }
     
     try {
         const response = await fetch('/api/mesas', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(mesa)
+            body: JSON.stringify({ numero: parseInt(numero) })
         });
         
-        if (!response.ok) throw new Error('Erro ao criar mesa');
+        if (!response.ok) {
+            const erro = await response.json();
+            throw new Error(erro.erro || 'Erro ao criar mesa');
+        }
         
         mostrarNotificacao('Mesa criada com sucesso!', 'success');
         document.getElementById('mesa-numero').value = '';
         await carregarMesas();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao criar mesa', 'error');
+        mostrarNotificacao('Erro ao criar mesa: ' + error.message, 'error');
     }
 });
 
@@ -427,11 +451,13 @@ window.excluirMesa = async (id) => {
 async function carregarUsuarios() {
     try {
         const response = await fetch('/api/usuarios');
+        if (!response.ok) throw new Error('Erro ao carregar usuários');
         state.usuarios = await response.json();
         atualizarTabelaUsuarios();
         console.log('👥 Usuários carregados:', state.usuarios.length);
     } catch (error) {
         console.error('Erro ao carregar usuários:', error);
+        mostrarNotificacao('Erro ao carregar usuários', 'error');
     }
 }
 
@@ -452,11 +478,11 @@ function atualizarTabelaUsuarios() {
                     ${getTipoIcon(user.tipo)} ${user.tipo}
                 </span>
             </td>
-            <td>${new Date(user.created_at).toLocaleDateString()}</td>
+            <td>${new Date(user.created_at).toLocaleDateString('pt-BR')}</td>
             <td>
                 <div class="action-btns">
                     <button class="btn-icon btn-edit" onclick="editarUsuario(${user.id})">✏️</button>
-                    <button class="btn-icon btn-delete" onclick="excluirUsuario(${user.id})" ${user.id === 1 ? 'disabled' : ''}>
+                    <button class="btn-icon btn-delete" onclick="excluirUsuario(${user.id})" ${user.id === 1 ? 'disabled style="opacity:0.5"' : ''}>
                         🗑️
                     </button>
                 </div>
@@ -488,34 +514,65 @@ function getTipoIcon(tipo) {
 document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const usuario = {
-        id: document.getElementById('usuario-id').value,
-        nome: document.getElementById('usuario-nome').value,
-        usuario: document.getElementById('usuario-login').value,
-        tipo: document.getElementById('usuario-tipo').value
+    // Pegar valores dos campos
+    const id = document.getElementById('usuario-id')?.value;
+    const nome = document.getElementById('usuario-nome')?.value;
+    const usuario = document.getElementById('usuario-login')?.value;
+    const senha = document.getElementById('usuario-senha')?.value;
+    const tipo = document.getElementById('usuario-tipo')?.value;
+
+    // VALIDAÇÕES
+    if (!nome || !usuario || !tipo) {
+        mostrarNotificacao('Nome, usuário e tipo são obrigatórios!', 'error');
+        return;
+    }
+
+    // Se for novo usuário, senha é obrigatória
+    if (!id && !senha) {
+        mostrarNotificacao('Senha é obrigatória para novo usuário!', 'error');
+        return;
+    }
+
+    // Montar objeto com os dados
+    const dados = {
+        nome: nome,
+        usuario: usuario,
+        tipo: tipo
     };
-    
-    const senha = document.getElementById('usuario-senha').value;
-    if (senha) usuario.senha = senha;
-    
+
+    // Só incluir senha se foi preenchida
+    if (senha) {
+        dados.senha = senha;
+    }
+
+    console.log('📦 Enviando dados:', dados);
+
     try {
-        const url = usuario.id ? `/api/usuarios/${usuario.id}` : '/api/usuarios';
-        const method = usuario.id ? 'PUT' : 'POST';
-        
+        const url = id ? `/api/usuarios/${id}` : '/api/usuarios';
+        const method = id ? 'PUT' : 'POST';
+
         const response = await fetch(url, {
-            method,
+            method: method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(usuario)
+            body: JSON.stringify(dados)
         });
-        
-        if (!response.ok) throw new Error('Erro ao salvar');
-        
-        mostrarNotificacao(`Usuário ${usuario.id ? 'atualizado' : 'criado'}!`, 'success');
+
+        const respostaData = await response.json();
+
+        if (!response.ok) {
+            throw new Error(respostaData.erro || 'Erro ao salvar');
+        }
+
+        mostrarNotificacao(`Usuário ${id ? 'atualizado' : 'criado'} com sucesso!`, 'success');
         limparFormUsuario();
         await carregarUsuarios();
+        
+        // Se criou novo usuário, limpar senha
+        if (!id) document.getElementById('usuario-senha').value = '';
+        
     } catch (error) {
-        console.error('Erro:', error);
-        mostrarNotificacao('Erro ao salvar usuário', 'error');
+        console.error('❌ Erro:', error);
+        mostrarNotificacao('Erro: ' + error.message, 'error');
     }
 });
 
@@ -534,7 +591,7 @@ window.editarUsuario = (id) => {
 
 window.excluirUsuario = async (id) => {
     if (id === 1) {
-        mostrarNotificacao('Não é possível excluir o admin principal', 'error');
+        mostrarNotificacao('Não é possível excluir o administrador principal', 'error');
         return;
     }
     
@@ -545,13 +602,16 @@ window.excluirUsuario = async (id) => {
             method: 'DELETE'
         });
         
-        if (!response.ok) throw new Error('Erro ao excluir');
+        if (!response.ok) {
+            const erro = await response.json();
+            throw new Error(erro.erro || 'Erro ao excluir');
+        }
         
         mostrarNotificacao('Usuário excluído!', 'success');
         await carregarUsuarios();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao excluir usuário', 'error');
+        mostrarNotificacao('Erro ao excluir usuário: ' + error.message, 'error');
     }
 };
 
@@ -567,15 +627,17 @@ window.limparFormUsuario = () => {
 async function carregarStats() {
     try {
         const response = await fetch('/api/stats');
-        state.stats = await response.json();
-        atualizarStats();
+        if (response.ok) {
+            state.stats = await response.json();
+            atualizarStats();
+        }
     } catch (error) {
         console.error('Erro ao carregar stats:', error);
     }
 }
 
 function atualizarStats() {
-    document.getElementById('stats-faturamento').textContent = formatarPreco(state.stats.faturamento || 0);
+    document.getElementById('stats-faturamento').textContent = `R$ ${(state.stats.faturamento || 0).toFixed(2)}`;
     document.getElementById('stats-pedidos').textContent = state.stats.pedidos || 0;
     document.getElementById('stats-clientes').textContent = state.stats.clientes || 0;
     document.getElementById('stats-tempo').textContent = state.stats.tempoMedio || 0;
@@ -585,8 +647,10 @@ function atualizarStats() {
 async function carregarConfig() {
     try {
         const response = await fetch('/api/config');
-        state.config = await response.json();
-        atualizarConfig();
+        if (response.ok) {
+            state.config = await response.json();
+            atualizarConfig();
+        }
     } catch (error) {
         console.error('Erro ao carregar config:', error);
     }
@@ -595,8 +659,8 @@ async function carregarConfig() {
 function atualizarConfig() {
     document.getElementById('config-nome').value = state.config.nome_restaurante || 'Meu Restaurante';
     document.getElementById('config-tempo').value = state.config.tempo_medio || 30;
-    document.getElementById('config-cor-primaria').value = state.config.cores_primaria || '#4CAF50';
-    document.getElementById('config-cor-secundaria').value = state.config.cores_secundaria || '#FF9800';
+    document.getElementById('config-cor-primaria').value = state.config.cor_primaria || '#4CAF50';
+    document.getElementById('config-cor-secundaria').value = state.config.cor_secundaria || '#FF9800';
 }
 
 // Evento do formulário de config
@@ -605,9 +669,9 @@ document.getElementById('form-config')?.addEventListener('submit', async (e) => 
     
     const config = {
         nome_restaurante: document.getElementById('config-nome').value,
-        tempo_medio: parseInt(document.getElementById('config-tempo').value),
-        cores_primaria: document.getElementById('config-cor-primaria').value,
-        cores_secundaria: document.getElementById('config-cor-secundaria').value
+        tempo_medio: parseInt(document.getElementById('config-tempo').value) || 30,
+        cor_primaria: document.getElementById('config-cor-primaria').value,
+        cor_secundaria: document.getElementById('config-cor-secundaria').value
     };
     
     try {
@@ -621,9 +685,9 @@ document.getElementById('form-config')?.addEventListener('submit', async (e) => 
         
         mostrarNotificacao('Configurações salvas!', 'success');
         
-        // Aplicar cores no site
-        document.documentElement.style.setProperty('--primary', config.cores_primaria);
-        document.documentElement.style.setProperty('--secondary', config.cores_secundaria);
+        document.documentElement.style.setProperty('--primary', config.cor_primaria);
+        document.documentElement.style.setProperty('--secondary', config.cor_secundaria);
+        
     } catch (error) {
         console.error('Erro:', error);
         mostrarNotificacao('Erro ao salvar configurações', 'error');
@@ -639,7 +703,15 @@ function configurarEventos() {
             document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('ativo'));
             
             btn.classList.add('ativo');
-            document.getElementById(`tab-${btn.dataset.tab}`).classList.add('ativo');
+            const tabId = btn.dataset.tab;
+            const tabPane = document.getElementById(`tab-${tabId}`);
+            if (tabPane) tabPane.classList.add('ativo');
+            
+            // Recarregar dados da tab
+            if (tabId === 'categorias') carregarCategorias();
+            if (tabId === 'cardapio') carregarCardapio();
+            if (tabId === 'usuarios') carregarUsuarios();
+            if (tabId === 'dashboard') carregarStats();
         });
     });
 }
@@ -680,14 +752,11 @@ function configurarBuscas() {
 }
 
 // ===== FUNÇÕES AUXILIARES =====
-function formatarPreco(valor) {
-    return valor.toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL'
-    });
-}
-
 function mostrarNotificacao(mensagem, tipo = 'info') {
+    // Remover notificações anteriores
+    const notificacoesAntigas = document.querySelectorAll('.notification');
+    notificacoesAntigas.forEach(n => n.remove());
+    
     const notificacao = document.createElement('div');
     notificacao.className = `notification ${tipo}`;
     notificacao.textContent = mensagem;
@@ -704,4 +773,4 @@ setInterval(() => {
     if (document.querySelector('.tab-btn.ativo')?.dataset.tab === 'dashboard') {
         carregarStats();
     }
-}, 30000); // A cada 30 segundos
+}, 30000);
