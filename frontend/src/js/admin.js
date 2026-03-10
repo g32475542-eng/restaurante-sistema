@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
     carregarTudo();
     configurarEventos();
     configurarBuscas();
+    
+    // DEBUG: Mostrar todos os campos do formulário de usuário
+    setTimeout(() => {
+        const form = document.getElementById('form-usuario');
+        if (form) {
+            console.log('📋 Campos do formulário de usuário:');
+            const inputs = form.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                console.log(`   ID: ${input.id}, Tipo: ${input.type}, Valor: ${input.value || '(vazio)'}`);
+            });
+        }
+    }, 1000);
 });
 
 // ===== CARREGAR TODOS OS DADOS =====
@@ -510,42 +522,69 @@ function getTipoIcon(tipo) {
     }
 }
 
-// Evento do formulário de usuário
+// Evento do formulário de usuário - VERSÃO CORRIGIDA
 document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
+    console.log('🔍 Iniciando salvamento de usuário...');
+    
     // Pegar valores dos campos
     const id = document.getElementById('usuario-id')?.value;
-    const nome = document.getElementById('usuario-nome')?.value;
-    const usuario = document.getElementById('usuario-login')?.value;
-    const senha = document.getElementById('usuario-senha')?.value;
-    const tipo = document.getElementById('usuario-tipo')?.value;
+    
+    // DEBUG: Verificar se os campos existem
+    const campoNome = document.getElementById('usuario-nome');
+    const campoLogin = document.getElementById('usuario-login');
+    const campoSenha = document.getElementById('usuario-senha');
+    const campoTipo = document.getElementById('usuario-tipo');
+    
+    console.log('📋 Campos do formulário:', {
+        nome: campoNome,
+        login: campoLogin,
+        senha: campoSenha,
+        tipo: campoTipo
+    });
+    
+    // Pegar valores
+    const nome = campoNome?.value;
+    const usuario = campoLogin?.value;
+    const senha = campoSenha?.value;
+    const tipo = campoTipo?.value;
+
+    console.log('📝 Valores capturados:', { id, nome, usuario, senha: senha ? '****' : '', tipo });
 
     // VALIDAÇÕES
-    if (!nome || !usuario || !tipo) {
-        mostrarNotificacao('Nome, usuário e tipo são obrigatórios!', 'error');
+    if (!nome || nome.trim() === '') {
+        mostrarNotificacao('Nome é obrigatório!', 'error');
         return;
     }
 
-    // Se for novo usuário, senha é obrigatória
-    if (!id && !senha) {
+    if (!usuario || usuario.trim() === '') {
+        mostrarNotificacao('Usuário é obrigatório!', 'error');
+        return;
+    }
+
+    if (!tipo) {
+        mostrarNotificacao('Tipo de usuário é obrigatório!', 'error');
+        return;
+    }
+
+    if (!id && (!senha || senha.trim() === '')) {
         mostrarNotificacao('Senha é obrigatória para novo usuário!', 'error');
         return;
     }
 
     // Montar objeto com os dados
     const dados = {
-        nome: nome,
-        usuario: usuario,
+        nome: nome.trim(),
+        usuario: usuario.trim(),
         tipo: tipo
     };
 
-    // Só incluir senha se foi preenchida
-    if (senha) {
-        dados.senha = senha;
+    if (senha && senha.trim() !== '') {
+        dados.senha = senha.trim();
     }
 
-    console.log('📦 Enviando dados:', dados);
+    console.log('📦 Enviando dados para API:', dados);
 
     try {
         const url = id ? `/api/usuarios/${id}` : '/api/usuarios';
@@ -558,17 +597,22 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
         });
 
         const respostaData = await response.json();
+        console.log('📥 Resposta da API:', respostaData);
 
         if (!response.ok) {
             throw new Error(respostaData.erro || 'Erro ao salvar');
         }
 
         mostrarNotificacao(`Usuário ${id ? 'atualizado' : 'criado'} com sucesso!`, 'success');
-        limparFormUsuario();
-        await carregarUsuarios();
         
-        // Se criou novo usuário, limpar senha
-        if (!id) document.getElementById('usuario-senha').value = '';
+        // Limpar formulário
+        document.getElementById('usuario-id').value = '';
+        document.getElementById('usuario-nome').value = '';
+        document.getElementById('usuario-login').value = '';
+        document.getElementById('usuario-senha').value = '';
+        document.getElementById('usuario-tipo').value = 'garcom';
+        
+        await carregarUsuarios();
         
     } catch (error) {
         console.error('❌ Erro:', error);
@@ -753,7 +797,6 @@ function configurarBuscas() {
 
 // ===== FUNÇÕES AUXILIARES =====
 function mostrarNotificacao(mensagem, tipo = 'info') {
-    // Remover notificações anteriores
     const notificacoesAntigas = document.querySelectorAll('.notification');
     notificacoesAntigas.forEach(n => n.remove());
     
