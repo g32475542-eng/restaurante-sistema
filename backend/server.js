@@ -51,7 +51,23 @@ function criarTabelas() {
     senha TEXT NOT NULL,
     tipo TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  )`, function(err) {
+    if (!err) {
+      // Inserir usuário admin padrão se não existir
+      db.get("SELECT COUNT(*) as count FROM usuarios", (err, row) => {
+        if (row.count === 0) {
+          const senhaAdmin = bcrypt.hashSync('123456', 10);
+          db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+            ['Administrador', 'admin', senhaAdmin, 'admin']);
+          db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+            ['João Garçom', 'joao', bcrypt.hashSync('123456', 10), 'garcom']);
+          db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+            ['Maria Cozinha', 'maria', bcrypt.hashSync('123456', 10), 'cozinha']);
+          console.log('✅ Usuários padrão criados');
+        }
+      });
+    }
+  });
 
   // Tabela de categorias
   db.run(`CREATE TABLE IF NOT EXISTS categorias (
@@ -121,64 +137,30 @@ function criarTabelas() {
     tipo TEXT DEFAULT 'texto'
   )`);
 
-  // Inserir dados iniciais
-  inicializarDados();
-}
-
-function inicializarDados() {
-  // Usuário admin padrão
-  db.get("SELECT COUNT(*) as count FROM usuarios", (err, row) => {
-    if (row.count === 0) {
-      const senhaAdmin = bcrypt.hashSync('123456', 10);
-      db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['Administrador', 'admin', senhaAdmin, 'admin']);
-      db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['João Garçom', 'joao', bcrypt.hashSync('123456', 10), 'garcom']);
-      db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['Maria Cozinha', 'maria', bcrypt.hashSync('123456', 10), 'cozinha']);
-    }
-  });
-
-  // Categorias padrão
+  // Inserir categorias padrão
   db.get("SELECT COUNT(*) as count FROM categorias", (err, row) => {
     if (row.count === 0) {
       const categorias = [
+        ['Entradas', '🥗', '#4CAF50', 1],
         ['Pratos', '🍽️', '#FF5722', 2],
         ['Bebidas', '🥤', '#2196F3', 3],
-        ['Sobremesas', '🍰', '#9C27B0', 4],
-        ['Entradas', '🥗', '#4CAF50', 1]
+        ['Sobremesas', '🍰', '#9C27B0', 4]
       ];
       
       categorias.forEach(cat => {
-        db.run("INSERT INTO categorias (nome, icone, cor, ordem) VALUES (?, ?, ?, ?)",
-          cat);
+        db.run("INSERT INTO categorias (nome, icone, cor, ordem) VALUES (?, ?, ?, ?)", cat);
       });
+      console.log('✅ Categorias padrão criadas');
     }
   });
 
-  // Mesas (até 20)
+  // Inserir mesas padrão
   db.get("SELECT COUNT(*) as count FROM mesas", (err, row) => {
     if (row.count === 0) {
       for (let i = 1; i <= 20; i++) {
         db.run("INSERT INTO mesas (numero, status) VALUES (?, ?)", [i, 'livre']);
       }
-    }
-  });
-
-  // Configurações padrão
-  db.get("SELECT COUNT(*) as count FROM configuracoes", (err, row) => {
-    if (row.count === 0) {
-      const configs = [
-        ['nome_restaurante', 'Meu Restaurante', 'texto'],
-        ['tempo_medio', '30', 'numero'],
-        ['cores_primaria', '#4CAF50', 'cor'],
-        ['cores_secundaria', '#FF9800', 'cor']
-      ];
-      
-      configs.forEach(cfg => {
-        db.run("INSERT INTO configuracoes (chave, valor, tipo) VALUES (?, ?, ?)",
-          cfg);
-      });
+      console.log('✅ Mesas padrão criadas');
     }
   });
 }
@@ -187,14 +169,33 @@ function inicializarDados() {
 app.post('/api/login', (req, res) => {
   const { usuario, senha } = req.body;
   
+  if (!usuario || !senha) {
+    return res.status(400).json({ erro: 'Usuário e senha são obrigatórios' });
+  }
+  
   db.get("SELECT * FROM usuarios WHERE usuario = ?", [usuario], (err, user) => {
-    if (!user || !bcrypt.compareSync(senha, user.senha)) {
+    if (err) {
+      console.error('Erro no banco:', err);
+      return res.status(500).json({ erro: 'Erro interno do servidor' });
+    }
+    
+    if (!user) {
       return res.status(401).json({ erro: 'Usuário ou senha inválidos' });
     }
     
+    // Comparar senha
+    const senhaValida = bcrypt.compareSync(senha, user.senha);
+    
+    if (!senhaValida) {
+      return res.status(401).json({ erro: 'Usuário ou senha inválidos' });
+    }
+    
+    // Salvar na sessão
     req.session.userId = user.id;
     req.session.userTipo = user.tipo;
     req.session.userNome = user.nome;
+    
+    console.log(`✅ Login bem-sucedido: ${user.nome} (${user.tipo})`);
     
     res.json({
       id: user.id,
@@ -206,8 +207,12 @@ app.post('/api/login', (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ ok: true });
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ erro: 'Erro ao fazer logout' });
+    }
+    res.json({ ok: true });
+  });
 });
 
 app.get('/api/me', (req, res) => {
@@ -217,7 +222,9 @@ app.get('/api/me', (req, res) => {
   
   db.get("SELECT id, nome, usuario, tipo FROM usuarios WHERE id = ?", 
     [req.session.userId], (err, user) => {
-    if (!user) return res.status(401).json({ erro: 'Usuário não encontrado' });
+    if (err || !user) {
+      return res.status(401).json({ erro: 'Usuário não encontrado' });
+    }
     res.json(user);
   });
 });
@@ -225,7 +232,10 @@ app.get('/api/me', (req, res) => {
 // ========== ROTAS DE CATEGORIAS ==========
 app.get('/api/categorias', (req, res) => {
   db.all("SELECT * FROM categorias ORDER BY ordem, nome", [], (err, rows) => {
-    if (err) return res.status(500).json({ erro: err.message });
+    if (err) {
+      console.error('Erro ao buscar categorias:', err);
+      return res.status(500).json({ erro: 'Erro ao buscar categorias' });
+    }
     res.json(rows);
   });
 });
@@ -233,12 +243,19 @@ app.get('/api/categorias', (req, res) => {
 app.post('/api/categorias', verificarAdmin, (req, res) => {
   const { nome, icone, cor, ordem } = req.body;
   
+  if (!nome) {
+    return res.status(400).json({ erro: 'Nome é obrigatório' });
+  }
+  
   db.run(
     "INSERT INTO categorias (nome, icone, cor, ordem) VALUES (?, ?, ?, ?)",
     [nome, icone || '📋', cor || '#4CAF50', ordem || 0],
     function(err) {
-      if (err) return res.status(500).json({ erro: err.message });
-      res.json({ id: this.lastID, ...req.body });
+      if (err) {
+        console.error('Erro ao criar categoria:', err);
+        return res.status(500).json({ erro: 'Erro ao criar categoria' });
+      }
+      res.json({ id: this.lastID, nome, icone, cor, ordem });
     }
   );
 });
@@ -250,7 +267,10 @@ app.put('/api/categorias/:id', verificarAdmin, (req, res) => {
     "UPDATE categorias SET nome = ?, icone = ?, cor = ?, ordem = ?, ativo = ? WHERE id = ?",
     [nome, icone, cor, ordem, ativo, req.params.id],
     function(err) {
-      if (err) return res.status(500).json({ erro: err.message });
+      if (err) {
+        console.error('Erro ao atualizar categoria:', err);
+        return res.status(500).json({ erro: 'Erro ao atualizar categoria' });
+      }
       res.json({ ok: true });
     }
   );
@@ -258,41 +278,10 @@ app.put('/api/categorias/:id', verificarAdmin, (req, res) => {
 
 app.delete('/api/categorias/:id', verificarAdmin, (req, res) => {
   db.run("DELETE FROM categorias WHERE id = ?", [req.params.id], function(err) {
-    if (err) return res.status(500).json({ erro: err.message });
-    res.json({ ok: true });
-  });
-});
-
-// ========== ROTAS DE MESAS ==========
-app.get('/api/mesas', (req, res) => {
-  db.all("SELECT * FROM mesas ORDER BY numero", [], (err, rows) => {
-    if (err) return res.status(500).json({ erro: err.message });
-    res.json(rows);
-  });
-});
-
-app.post('/api/mesas', verificarAdmin, (req, res) => {
-  const { numero } = req.body;
-  
-  db.run("INSERT INTO mesas (numero) VALUES (?)", [numero], function(err) {
-    if (err) return res.status(500).json({ erro: err.message });
-    res.json({ id: this.lastID, numero, status: 'livre' });
-  });
-});
-
-app.put('/api/mesas/:id', verificarAdmin, (req, res) => {
-  const { numero, status } = req.body;
-  
-  db.run("UPDATE mesas SET numero = ?, status = ? WHERE id = ?",
-    [numero, status, req.params.id], function(err) {
-    if (err) return res.status(500).json({ erro: err.message });
-    res.json({ ok: true });
-  });
-});
-
-app.delete('/api/mesas/:id', verificarAdmin, (req, res) => {
-  db.run("DELETE FROM mesas WHERE id = ?", [req.params.id], function(err) {
-    if (err) return res.status(500).json({ erro: err.message });
+    if (err) {
+      console.error('Erro ao deletar categoria:', err);
+      return res.status(500).json({ erro: 'Erro ao deletar categoria' });
+    }
     res.json({ ok: true });
   });
 });
@@ -300,13 +289,15 @@ app.delete('/api/mesas/:id', verificarAdmin, (req, res) => {
 // ========== ROTAS DO CARDÁPIO ==========
 app.get('/api/cardapio', (req, res) => {
   db.all(`
-    SELECT c.*, cat.nome as categoria_nome, cat.cor as categoria_cor 
+    SELECT c.*, cat.nome as categoria_nome, cat.cor as categoria_cor, cat.icone as categoria_icone
     FROM cardapio c
     LEFT JOIN categorias cat ON c.categoria_id = cat.id
-    WHERE c.disponivel = 1
     ORDER BY cat.ordem, c.nome
   `, [], (err, rows) => {
-    if (err) return res.status(500).json({ erro: err.message });
+    if (err) {
+      console.error('Erro ao buscar cardápio:', err);
+      return res.status(500).json({ erro: 'Erro ao buscar cardápio' });
+    }
     res.json(rows);
   });
 });
@@ -314,11 +305,18 @@ app.get('/api/cardapio', (req, res) => {
 app.post('/api/cardapio', verificarAdmin, (req, res) => {
   const { nome, preco, categoria_id, descricao, tempo_preparo } = req.body;
   
+  if (!nome || !preco || !categoria_id) {
+    return res.status(400).json({ erro: 'Nome, preço e categoria são obrigatórios' });
+  }
+  
   db.run(
     "INSERT INTO cardapio (nome, preco, categoria_id, descricao, tempo_preparo) VALUES (?, ?, ?, ?, ?)",
-    [nome, preco, categoria_id, descricao, tempo_preparo || 15],
+    [nome, preco, categoria_id, descricao || '', tempo_preparo || 15],
     function(err) {
-      if (err) return res.status(500).json({ erro: err.message });
+      if (err) {
+        console.error('Erro ao criar item:', err);
+        return res.status(500).json({ erro: 'Erro ao criar item' });
+      }
       res.json({ id: this.lastID, ...req.body });
     }
   );
@@ -331,10 +329,131 @@ app.put('/api/cardapio/:id', verificarAdmin, (req, res) => {
     "UPDATE cardapio SET nome = ?, preco = ?, categoria_id = ?, descricao = ?, disponivel = ?, tempo_preparo = ? WHERE id = ?",
     [nome, preco, categoria_id, descricao, disponivel, tempo_preparo, req.params.id],
     function(err) {
-      if (err) return res.status(500).json({ erro: err.message });
+      if (err) {
+        console.error('Erro ao atualizar item:', err);
+        return res.status(500).json({ erro: 'Erro ao atualizar item' });
+      }
       res.json({ ok: true });
     }
   );
+});
+
+app.delete('/api/cardapio/:id', verificarAdmin, (req, res) => {
+  db.run("DELETE FROM cardapio WHERE id = ?", [req.params.id], function(err) {
+    if (err) {
+      console.error('Erro ao deletar item:', err);
+      return res.status(500).json({ erro: 'Erro ao deletar item' });
+    }
+    res.json({ ok: true });
+  });
+});
+
+// ========== ROTAS DE MESAS ==========
+app.get('/api/mesas', (req, res) => {
+  db.all("SELECT * FROM mesas ORDER BY numero", [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar mesas:', err);
+      return res.status(500).json({ erro: 'Erro ao buscar mesas' });
+    }
+    res.json(rows);
+  });
+});
+
+app.post('/api/mesas', verificarAdmin, (req, res) => {
+  const { numero } = req.body;
+  
+  if (!numero) {
+    return res.status(400).json({ erro: 'Número da mesa é obrigatório' });
+  }
+  
+  db.run("INSERT INTO mesas (numero) VALUES (?)", [numero], function(err) {
+    if (err) {
+      console.error('Erro ao criar mesa:', err);
+      return res.status(500).json({ erro: 'Erro ao criar mesa' });
+    }
+    res.json({ id: this.lastID, numero, status: 'livre' });
+  });
+});
+
+app.delete('/api/mesas/:id', verificarAdmin, (req, res) => {
+  db.run("DELETE FROM mesas WHERE id = ?", [req.params.id], function(err) {
+    if (err) {
+      console.error('Erro ao deletar mesa:', err);
+      return res.status(500).json({ erro: 'Erro ao deletar mesa' });
+    }
+    res.json({ ok: true });
+  });
+});
+
+// ========== ROTAS DE USUÁRIOS ==========
+app.get('/api/usuarios', verificarAdmin, (req, res) => {
+  db.all("SELECT id, nome, usuario, tipo, created_at FROM usuarios ORDER BY id", [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar usuários:', err);
+      return res.status(500).json({ erro: 'Erro ao buscar usuários' });
+    }
+    res.json(rows);
+  });
+});
+
+app.post('/api/usuarios', verificarAdmin, (req, res) => {
+  const { nome, usuario, senha, tipo } = req.body;
+  
+  if (!nome || !usuario || !senha || !tipo) {
+    return res.status(400).json({ erro: 'Todos os campos são obrigatórios' });
+  }
+  
+  const senhaHash = bcrypt.hashSync(senha, 10);
+  
+  db.run(
+    "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+    [nome, usuario, senhaHash, tipo],
+    function(err) {
+      if (err) {
+        console.error('Erro ao criar usuário:', err);
+        return res.status(500).json({ erro: 'Erro ao criar usuário' });
+      }
+      res.json({ id: this.lastID, nome, usuario, tipo });
+    }
+  );
+});
+
+app.put('/api/usuarios/:id', verificarAdmin, (req, res) => {
+  const { nome, usuario, senha, tipo } = req.body;
+  const id = req.params.id;
+  
+  let query, params;
+  
+  if (senha) {
+    const senhaHash = bcrypt.hashSync(senha, 10);
+    query = "UPDATE usuarios SET nome = ?, usuario = ?, senha = ?, tipo = ? WHERE id = ?";
+    params = [nome, usuario, senhaHash, tipo, id];
+  } else {
+    query = "UPDATE usuarios SET nome = ?, usuario = ?, tipo = ? WHERE id = ?";
+    params = [nome, usuario, tipo, id];
+  }
+  
+  db.run(query, params, function(err) {
+    if (err) {
+      console.error('Erro ao atualizar usuário:', err);
+      return res.status(500).json({ erro: 'Erro ao atualizar usuário' });
+    }
+    res.json({ ok: true });
+  });
+});
+
+app.delete('/api/usuarios/:id', verificarAdmin, (req, res) => {
+  if (req.params.id === '1') {
+    return res.status(400).json({ erro: 'Não é possível excluir o administrador principal' });
+  }
+  
+  db.run("DELETE FROM usuarios WHERE id = ?", [req.params.id], function(err) {
+    if (err) {
+      console.error('Erro ao deletar usuário:', err);
+      return res.status(500).json({ erro: 'Erro ao deletar usuário' });
+    }
+    res.json({ ok: true });
+  });
 });
 
 // ========== ROTAS DE PEDIDOS ==========
@@ -348,9 +467,12 @@ app.post('/api/pedidos', (req, res) => {
   
   db.run(
     "INSERT INTO pedidos (id, mesa_id, garcom_id, total, observacao) VALUES (?, ?, ?, ?, ?)",
-    [pedidoId, pedido.mesa, req.session.userId, pedido.total, pedido.observacao],
+    [pedidoId, pedido.mesa, req.session.userId, pedido.total, pedido.observacao || ''],
     function(err) {
-      if (err) return res.status(500).json({ erro: err.message });
+      if (err) {
+        console.error('Erro ao criar pedido:', err);
+        return res.status(500).json({ erro: 'Erro ao criar pedido' });
+      }
       
       // Inserir itens do pedido
       const stmt = db.prepare(
@@ -383,31 +505,84 @@ app.get('/api/pedidos/pendentes', (req, res) => {
     WHERE p.status IN ('pendente', 'preparando')
     ORDER BY p.created_at DESC
   `, [], (err, rows) => {
-    if (err) return res.status(500).json({ erro: err.message });
-    res.json(rows);
-  });
-});
-
-// ========== ROTAS DE USUÁRIOS ==========
-app.get('/api/usuarios', verificarAdmin, (req, res) => {
-  db.all("SELECT id, nome, usuario, tipo, created_at FROM usuarios ORDER BY id", [], (err, rows) => {
-    if (err) return res.status(500).json({ erro: err.message });
-    res.json(rows);
-  });
-});
-
-app.post('/api/usuarios', verificarAdmin, (req, res) => {
-  const { nome, usuario, senha, tipo } = req.body;
-  const senhaHash = bcrypt.hashSync(senha, 10);
-  
-  db.run(
-    "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-    [nome, usuario, senhaHash, tipo],
-    function(err) {
-      if (err) return res.status(500).json({ erro: err.message });
-      res.json({ id: this.lastID, nome, usuario, tipo });
+    if (err) {
+      console.error('Erro ao buscar pedidos:', err);
+      return res.status(500).json({ erro: 'Erro ao buscar pedidos' });
     }
-  );
+    res.json(rows);
+  });
+});
+
+app.get('/api/pedidos/prontos', (req, res) => {
+  db.all(`
+    SELECT p.*, m.numero as mesa_numero
+    FROM pedidos p
+    JOIN mesas m ON p.mesa_id = m.id
+    WHERE p.status = 'pronto'
+    ORDER BY p.created_at DESC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar pedidos prontos:', err);
+      return res.status(500).json({ erro: 'Erro ao buscar pedidos' });
+    }
+    res.json(rows);
+  });
+});
+
+// ========== ROTAS DE ESTATÍSTICAS ==========
+app.get('/api/stats', verificarAdmin, (req, res) => {
+  const hoje = new Date().toISOString().split('T')[0];
+  
+  db.all(`
+    SELECT 
+      COUNT(*) as total_pedidos,
+      SUM(total) as faturamento,
+      COUNT(DISTINCT mesa_id) as clientes
+    FROM pedidos 
+    WHERE date(created_at) = date('now')
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar stats:', err);
+      return res.status(500).json({ erro: 'Erro ao buscar estatísticas' });
+    }
+    
+    res.json({
+      faturamento: rows[0].faturamento || 0,
+      pedidos: rows[0].total_pedidos || 0,
+      clientes: rows[0].clientes || 0,
+      tempoMedio: 30
+    });
+  });
+});
+
+// ========== ROTAS DE CONFIGURAÇÕES ==========
+app.get('/api/config', (req, res) => {
+  db.all("SELECT chave, valor FROM configuracoes", [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar config:', err);
+      return res.status(500).json({ erro: 'Erro ao buscar configurações' });
+    }
+    
+    const config = {};
+    rows.forEach(row => {
+      config[row.chave] = row.valor;
+    });
+    
+    res.json(config);
+  });
+});
+
+app.post('/api/config', verificarAdmin, (req, res) => {
+  const configs = req.body;
+  
+  const stmt = db.prepare("INSERT OR REPLACE INTO configuracoes (chave, valor) VALUES (?, ?)");
+  
+  Object.entries(configs).forEach(([chave, valor]) => {
+    stmt.run([chave, valor.toString()]);
+  });
+  
+  stmt.finalize();
+  res.json({ ok: true });
 });
 
 // ========== MIDDLEWARE DE ADMIN ==========
@@ -417,7 +592,7 @@ function verificarAdmin(req, res, next) {
   }
   
   db.get("SELECT tipo FROM usuarios WHERE id = ?", [req.session.userId], (err, user) => {
-    if (!user || user.tipo !== 'admin') {
+    if (err || !user || user.tipo !== 'admin') {
       return res.status(403).json({ erro: 'Acesso negado' });
     }
     next();
@@ -435,19 +610,21 @@ io.on('connection', (socket) => {
   });
 
   socket.on('iniciar-preparo', (pedidoId) => {
-    const pedido = pedidosAtivos.find(p => p.id === pedidoId);
-    if (pedido) {
-      pedido.status = 'preparando';
-      io.emit('pedido-em-preparo', pedidoId);
-    }
+    console.log('🔨 Iniciar preparo:', pedidoId);
+    
+    db.run("UPDATE pedidos SET status = 'preparando', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [pedidoId]);
+    io.emit('pedido-em-preparo', pedidoId);
   });
 
   socket.on('pedido-pronto', (pedidoId) => {
-    const pedido = pedidosAtivos.find(p => p.id === pedidoId);
-    if (pedido) {
-      pedido.status = 'pronto';
-      io.emit('pedido-para-entrega', pedidoId);
-    }
+    console.log('✅ Pedido pronto:', pedidoId);
+    
+    db.run("UPDATE pedidos SET status = 'pronto', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [pedidoId]);
+    io.emit('pedido-para-entrega', pedidoId);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('❌ Cliente desconectado:', socket.id);
   });
 });
 
@@ -457,21 +634,21 @@ app.get('/', (req, res) => {
 });
 
 app.get('/garcom', (req, res) => {
-  if (!req.session.userId || req.session.userTipo !== 'garcom') {
+  if (!req.session.userId) {
     return res.redirect('/');
   }
   res.sendFile(path.join(__dirname, '../frontend/src/pages/garcom/dashboard-garcom.html'));
 });
 
 app.get('/cozinha', (req, res) => {
-  if (!req.session.userId || req.session.userTipo !== 'cozinha') {
+  if (!req.session.userId) {
     return res.redirect('/');
   }
   res.sendFile(path.join(__dirname, '../frontend/src/pages/cozinha/tela-cozinha.html'));
 });
 
 app.get('/admin', (req, res) => {
-  if (!req.session.userId || req.session.userTipo !== 'admin') {
+  if (!req.session.userId) {
     return res.redirect('/');
   }
   res.sendFile(path.join(__dirname, '../frontend/src/pages/admin/painel-admin.html'));
