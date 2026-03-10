@@ -125,48 +125,81 @@ function criarTabelas() {
 
   console.log('✅ Tabelas criadas/verificadas');
 
-  // Inserir dados iniciais
-  inserirDadosIniciais();
-}
-
 function inserirDadosIniciais() {
   // Usuários padrão
-  db.get("SELECT COUNT(*) as count FROM usuarios", (err, row) => {
-    if (row.count === 0) {
+  db.get("SELECT COUNT(*) as count FROM usuarios", [], (err, row) => {
+    if (err) {
+      console.error('Erro ao verificar usuários:', err);
+      return;
+    }
+    
+    // Verificar se row existe e count é 0
+    if (!row || row.count === 0) {
       const senhaAdmin = bcrypt.hashSync('123456', 10);
+      
       db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['Administrador', 'admin', senhaAdmin, 'admin']);
+        ['Administrador', 'admin', senhaAdmin, 'admin'], function(err) {
+          if (err) console.error('Erro ao criar admin:', err);
+      });
+      
       db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['João Garçom', 'joao', bcrypt.hashSync('123456', 10), 'garcom']);
+        ['João Garçom', 'joao', bcrypt.hashSync('123456', 10), 'garcom'], function(err) {
+          if (err) console.error('Erro ao criar garçom:', err);
+      });
+      
       db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['Maria Cozinha', 'maria', bcrypt.hashSync('123456', 10), 'cozinha']);
+        ['Maria Cozinha', 'maria', bcrypt.hashSync('123456', 10), 'cozinha'], function(err) {
+          if (err) console.error('Erro ao criar cozinha:', err);
+      });
+      
       console.log('✅ Usuários padrão criados');
+    } else {
+      console.log('👥 Usuários já existem');
     }
   });
 
   // Categorias padrão
-  db.get("SELECT COUNT(*) as count FROM categorias", (err, row) => {
-    if (row.count === 0) {
+  db.get("SELECT COUNT(*) as count FROM categorias", [], (err, row) => {
+    if (err) {
+      console.error('Erro ao verificar categorias:', err);
+      return;
+    }
+    
+    if (!row || row.count === 0) {
       const categorias = [
         ['Entradas', '🥗', '#4CAF50', 1],
         ['Pratos', '🍽️', '#FF5722', 2],
         ['Bebidas', '🥤', '#2196F3', 3],
         ['Sobremesas', '🍰', '#9C27B0', 4]
       ];
+      
       categorias.forEach(cat => {
-        db.run("INSERT INTO categorias (nome, icone, cor, ordem) VALUES (?, ?, ?, ?)", cat);
+        db.run("INSERT INTO categorias (nome, icone, cor, ordem) VALUES (?, ?, ?, ?)", cat, function(err) {
+          if (err) console.error('Erro ao criar categoria:', err);
+        });
       });
       console.log('✅ Categorias padrão criadas');
+    } else {
+      console.log('📋 Categorias já existem');
     }
   });
 
   // Mesas padrão
-  db.get("SELECT COUNT(*) as count FROM mesas", (err, row) => {
-    if (row.count === 0) {
+  db.get("SELECT COUNT(*) as count FROM mesas", [], (err, row) => {
+    if (err) {
+      console.error('Erro ao verificar mesas:', err);
+      return;
+    }
+    
+    if (!row || row.count === 0) {
       for (let i = 1; i <= 20; i++) {
-        db.run("INSERT INTO mesas (numero, status) VALUES (?, ?)", [i, 'livre']);
+        db.run("INSERT INTO mesas (numero, status) VALUES (?, ?)", [i, 'livre'], function(err) {
+          if (err) console.error('Erro ao criar mesa:', err);
+        });
       }
       console.log('✅ Mesas padrão criadas');
+    } else {
+      console.log('🪑 Mesas já existem');
     }
   });
 }
