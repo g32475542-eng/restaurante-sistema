@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin - Sistema Restaurante</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #f5f5f5;
+      }
+      .header {
+        background: #f44336;
+        color: white;
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .header h1 {
+        font-size: 24px;
+      }
+      .btn-sair {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        text-decoration: none;
+      }
+      .btn-sair:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      .container {
+        padding: 20px;
+      }
+      .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .tab-btn {
+        padding: 10px 20px;
+        background: #e0e0e0;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .tab-btn.ativo {
+        background: #f44336;
+        color: white;
+      }
+      .tab-content {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .tab-pane {
+        display: none;
+      }
+      .tab-pane.ativo {
+        display: block;
+      }
+
+      /* Estilos para cardápio */
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      .form-group input,
+      .form-group select,
+      .form-group textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .btn-primary {
+        background: #f44336;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .btn-primary:hover {
+        background: #d32f2f;
+      }
+      .btn-secondary {
+        background: #4caf50;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .tabela-cardapio {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      .tabela-cardapio th {
+        background: #f5f5f5;
+        padding: 10px;
+        text-align: left;
+      }
+      .tabela-cardapio td {
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+      }
+      .btn-editar,
+      .btn-excluir {
+        padding: 5px 10px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        margin-right: 5px;
+      }
+      .btn-editar {
+        background: #ff9800;
+        color: white;
+      }
+      .btn-excluir {
+        background: #f44336;
+        color: white;
+      }
+
+      /* Estilos para usuários */
+      .login-form {
+        max-width: 400px;
+        margin: 50px auto;
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .login-form h2 {
+        margin-bottom: 20px;
+        color: #333;
+      }
+      .erro-msg {
+        color: #f44336;
+        margin-top: 10px;
+        display: none;
+      }
+      .sucesso-msg {
+        color: #4caf50;
+        margin-top: 10px;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="login-section">
+      <div class="login-form">
+        <h2>🔐 Login Administrativo</h2>
+        <div class="form-group">
+          <label>Usuário:</label>
+          <input type="text" id="usuario" placeholder="admin" />
+        </div>
+        <div class="form-group">
+          <label>Senha:</label>
+          <input type="password" id="senha" placeholder="123456" />
+        </div>
+        <button class="btn-primary" id="btn-login">Entrar</button>
+        <div id="erro-login" class="erro-msg">Usuário ou senha inválidos!</div>
+      </div>
+    </div>
+
+    <div id="admin-section" style="display: none">
+      <div class="header">
+        <h1>⚙️ Painel Administrativo</h1>
+        <button class="btn-sair" id="btn-logout">Sair</button>
+      </div>
+
+      <div class="container">
+        <div class="tabs">
+          <button class="tab-btn ativo" data-tab="cardapio">📋 Cardápio</button>
+          <button class="tab-btn" data-tab="usuarios">👥 Usuários</button>
+          <button class="tab-btn" data-tab="relatorios">📊 Relatórios</button>
+          <button class="tab-btn" data-tab="config">⚙️ Configurações</button>
+        </div>
+
+        <div class="tab-content">
+          <!-- Aba Cardápio -->
+          <div class="tab-pane ativo" id="tab-cardapio">
+            <h2>Gerenciar Cardápio</h2>
+
+            <form id="form-item">
+              <input type="hidden" id="item-id" />
+              <div class="form-group">
+                <label>Nome do Item:</label>
+                <input type="text" id="item-nome" required />
+              </div>
+              <div class="form-group">
+                <label>Preço (R$):</label>
+                <input type="number" id="item-preco" step="0.01" required />
+              </div>
+              <div class="form-group">
+                <label>Categoria:</label>
+                <select id="item-categoria" required>
+                  <option value="pratos">Pratos</option>
+                  <option value="bebidas">Bebidas</option>
+                  <option value="sobremesas">Sobremesas</option>
+                  <option value="entradas">Entradas</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Descrição:</label>
+                <textarea id="item-descricao" rows="3"></textarea>
+              </div>
+              <button type="submit" class="btn-primary" id="btn-salvar-item">
+                Salvar Item
+              </button>
+              <button type="button" class="btn-secondary" id="btn-cancelar">
+                Cancelar
+              </button>
+            </form>
+
+            <table class="tabela-cardapio">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nome</th>
+                  <th>Preço</th>
+                  <th>Categoria</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tabela-cardapio-body">
+                <!-- Itens serão carregados aqui -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Aba Usuários -->
+          <div class="tab-pane" id="tab-usuarios">
+            <h2>Gerenciar Usuários</h2>
+
+            <form id="form-usuario">
+              <input type="hidden" id="usuario-id" />
+              <div class="form-group">
+                <label>Nome:</label>
+                <input type="text" id="usuario-nome" required />
+              </div>
+              <div class="form-group">
+                <label>Usuário:</label>
+                <input type="text" id="usuario-login" required />
+              </div>
+              <div class="form-group">
+                <label>Senha:</label>
+                <input type="password" id="usuario-senha" />
+                <small>Deixe em branco para manter a mesma</small>
+              </div>
+              <div class="form-group">
+                <label>Tipo:</label>
+                <select id="usuario-tipo" required>
+                  <option value="garcom">Garçom</option>
+                  <option value="cozinha">Cozinha</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+              <button type="submit" class="btn-primary">Salvar Usuário</button>
+            </form>
+
+            <table class="tabela-cardapio">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nome</th>
+                  <th>Usuário</th>
+                  <th>Tipo</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tabela-usuarios-body">
+                <!-- Usuários serão carregados aqui -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Aba Relatórios -->
+          <div class="tab-pane" id="tab-relatorios">
+            <h2>Relatórios de Pedidos</h2>
+            <div class="form-group">
+              <label>Data:</label>
+              <input type="date" id="data-relatorio" />
+            </div>
+            <button class="btn-primary" id="btn-gerar-relatorio">
+              Gerar Relatório
+            </button>
+
+            <div id="relatorio-resultado" style="margin-top: 20px">
+              <!-- Resultado do relatório -->
+            </div>
+          </div>
+
+          <!-- Aba Configurações -->
+          <div class="tab-pane" id="tab-config">
+            <h2>Configurações do Sistema</h2>
+            <div class="form-group">
+              <label>Nome do Restaurante:</label>
+              <input type="text" id="config-nome" value="Meu Restaurante" />
+            </div>
+            <div class="form-group">
+              <label>Tempo médio de preparo (minutos):</label>
+              <input type="number" id="config-tempo" value="30" />
+            </div>
+            <button class="btn-primary" id="btn-salvar-config">
+              Salvar Configurações
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/admin.js"></script>
+  </body>
+</html>

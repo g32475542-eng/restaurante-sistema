@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cozinha - Sistema Restaurante</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #333;
+        color: white;
+      }
+      .header {
+        background: #ff9800;
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .header h1 {
+        font-size: 32px;
+      }
+      .btn-sair {
+        background: rgba(0, 0, 0, 0.2);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        text-decoration: none;
+      }
+      .btn-sair:hover {
+        background: rgba(0, 0, 0, 0.3);
+      }
+      .status-bar {
+        background: #444;
+        padding: 10px 20px;
+        display: flex;
+        gap: 20px;
+        font-size: 18px;
+      }
+      .status-bar span {
+        background: #555;
+        padding: 5px 15px;
+        border-radius: 20px;
+      }
+      .container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        padding: 20px;
+        height: calc(100vh - 130px);
+      }
+      .coluna {
+        background: #444;
+        border-radius: 10px;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      .coluna h2 {
+        text-align: center;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 15px;
+      }
+      .coluna.pendente h2 {
+        background: #f44336;
+      }
+      .coluna.preparando h2 {
+        background: #ff9800;
+      }
+      .coluna.pronto h2 {
+        background: #4caf50;
+      }
+      .pedidos-lista {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .pedido-card {
+        background: #555;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        border-left: 5px solid transparent;
+      }
+      .pedido-card.pendente {
+        border-left-color: #f44336;
+      }
+      .pedido-card.preparando {
+        border-left-color: #ff9800;
+      }
+      .pedido-card.pronto {
+        border-left-color: #4caf50;
+      }
+      .pedido-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #666;
+      }
+      .mesa-numero {
+        font-size: 24px;
+        font-weight: bold;
+        background: #666;
+        padding: 5px 15px;
+        border-radius: 5px;
+      }
+      .tempo-pedido {
+        font-size: 18px;
+        font-weight: bold;
+        color: #ff9800;
+      }
+      .tempo-pedido.atrasado {
+        color: #f44336;
+      }
+      .itens-pedido {
+        margin: 10px 0;
+      }
+      .item {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 0;
+      }
+      .observacao {
+        background: #666;
+        padding: 8px;
+        border-radius: 5px;
+        margin: 10px 0;
+        font-style: italic;
+        color: #ffd700;
+      }
+      .acoes-pedido {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .btn-acao {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background 0.3s;
+      }
+      .btn-iniciar {
+        background: #ff9800;
+        color: white;
+      }
+      .btn-iniciar:hover {
+        background: #f57c00;
+      }
+      .btn-pronto {
+        background: #4caf50;
+        color: white;
+      }
+      .btn-pronto:hover {
+        background: #45a049;
+      }
+      .btn-entregue {
+        background: #2196f3;
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>👩‍🍳 Tela da Cozinha</h1>
+      <a href="/" class="btn-sair">Sair</a>
+    </div>
+
+    <div class="status-bar">
+      <span id="hora-atual"></span>
+      <span id="pedidos-pendentes">Pendentes: 0</span>
+      <span id="pedidos-preparando">Preparando: 0</span>
+      <span id="pedidos-prontos">Prontos: 0</span>
+    </div>
+
+    <div class="container">
+      <!-- Coluna Pendentes -->
+      <div class="coluna pendente">
+        <h2>📝 Pendentes</h2>
+        <div class="pedidos-lista" id="pendentes-lista">
+          <!-- Pedidos pendentes aparecerão aqui -->
+        </div>
+      </div>
+
+      <!-- Coluna Em Preparo -->
+      <div class="coluna preparando">
+        <h2>👨‍🍳 Em Preparo</h2>
+        <div class="pedidos-lista" id="preparando-lista">
+          <!-- Pedidos em preparo aparecerão aqui -->
+        </div>
+      </div>
+
+      <!-- Coluna Prontos -->
+      <div class="coluna pronto">
+        <h2>✅ Prontos</h2>
+        <div class="pedidos-lista" id="prontos-lista">
+          <!-- Pedidos prontos aparecerão aqui -->
+        </div>
+      </div>
+    </div>
+
+    <!-- SCRIPTS - ORDEM CORRETA: Primeiro a biblioteca, depois seus scripts -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="/js/socket-client.js"></script>
+    <script src="/js/cozinha.js"></script>
+  </body>
+</html>
