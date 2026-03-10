@@ -1,606 +1,463 @@
-// Estado da aplicação
-let mesaSelecionada = null;
-let carrinho = [];
-let cardapio = [];
+// ===== ESTADO DA APLICAÇÃO =====
+let state = {
+    mesaSelecionada: null,
+    carrinho: [],
+    cardapio: [],
+    categorias: [],
+    mesas: [],
+    pedidosProntos: [],
+    config: {}
+};
 
-// Inicialização
-document.addEventListener("DOMContentLoaded", () => {
-  carregarCardapio();
-  carregarMesas();
-  configurarEventos();
-
-  // Verificar conexão com socket
-  if (typeof socket !== "undefined") {
-    console.log("✅ Socket conectado:", socket.id);
-  } else {
-    console.error("❌ Socket não encontrado!");
-  }
+// ===== INICIALIZAÇÃO =====
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 Inicializando painel do garçom...');
+    
+    // Configurar socket
+    setupSocket();
+    
+    // Carregar dados
+    await carregarCategorias();
+    await carregarCardapio();
+    await carregarMesas();
+    
+    // Configurar eventos
+    configurarEventos();
+    
+    // Iniciar atualização de pedidos prontos
+    setInterval(buscarPedidosProntos, 5000);
 });
 
-function carregarCardapio() {
-  // Carregar cardápio do localStorage (salvo pelo admin)
-  const cardapioSalvo = localStorage.getItem("cardapio");
-
-  if (cardapioSalvo) {
-    cardapio = JSON.parse(cardapioSalvo);
-    console.log("📋 Cardápio carregado do admin:", cardapio);
-  } else {
-    // Cardápio padrão caso não tenha nada salvo
-    cardapio = [
-      {
-        id: 1,
-        nome: "Filé à Parmegiana",
-        preco: 45.9,
-        categoria: "pratos",
-        descricao: "Filé mignon empanado com molho parmegiana e queijo",
-      },
-      {
-        id: 2,
-        nome: "Frango Grelhado",
-        preco: 32.9,
-        categoria: "pratos",
-        descricao: "Peito de frango grelhado com legumes",
-      },
-      {
-        id: 3,
-        nome: "Coca Cola 2L",
-        preco: 12.9,
-        categoria: "bebidas",
-        descricao: "Refrigerante Coca Cola 2 litros",
-      },
-      {
-        id: 4,
-        nome: "Suco de Laranja",
-        preco: 8.9,
-        categoria: "bebidas",
-        descricao: "Suco natural de laranja 500ml",
-      },
-      {
-        id: 5,
-        nome: "Pudim",
-        preco: 15.9,
-        categoria: "sobremesas",
-        descricao: "Pudim de leite condensado com calda de caramelo",
-      },
-      {
-        id: 6,
-        nome: "Brownie",
-        preco: 18.9,
-        categoria: "sobremesas",
-        descricao: "Brownie de chocolate com sorvete",
-      },
-      {
-        id: 7,
-        nome: "Batata Frita",
-        preco: 22.9,
-        categoria: "entradas",
-        descricao: "Porção de batata frita crocante",
-      },
-      {
-        id: 8,
-        nome: "Caldo de Mandioca",
-        preco: 16.9,
-        categoria: "entradas",
-        descricao: "Caldo de mandioca com carne seca",
-      },
-    ];
-    // Salvar cardápio padrão no localStorage
-    localStorage.setItem("cardapio", JSON.stringify(cardapio));
-  }
-
-  // Carregar itens na tela
-  carregarItensCardapio("todos");
-}
-
-function carregarMesas() {
-  const listaMesas = document.getElementById("lista-mesas");
-  if (!listaMesas) return;
-
-  listaMesas.innerHTML = "";
-
-  // Criar 12 mesas
-  for (let i = 1; i <= 12; i++) {
-    const mesaDiv = document.createElement("div");
-    mesaDiv.className = "mesa-item";
-    mesaDiv.textContent = `Mesa ${i}`;
-    mesaDiv.dataset.mesa = i;
-
-    // Verificar se mesa tem pedidos ativos (simulado)
-    const pedidosAtivos = JSON.parse(
-      sessionStorage.getItem(`mesa_${i}_pedidos`) || "[]",
-    );
-    if (pedidosAtivos.length > 0) {
-      mesaDiv.classList.add("ocupada");
-    }
-
-    mesaDiv.addEventListener("click", () => selecionarMesa(i));
-
-    listaMesas.appendChild(mesaDiv);
-  }
-}
-
-function carregarItensCardapio(categoria = "todos") {
-  const container = document.getElementById("itens-cardapio");
-  if (!container) return;
-
-  container.innerHTML = "";
-
-  const itensFiltrados =
-    categoria === "todos"
-      ? cardapio
-      : cardapio.filter((item) => item.categoria === categoria);
-
-  if (itensFiltrados.length === 0) {
-    container.innerHTML =
-      '<p style="text-align: center; color: #999; grid-column: 1/-1;">Nenhum item nesta categoria</p>';
-    return;
-  }
-
-  itensFiltrados.forEach((item) => {
-    const itemDiv = document.createElement("div");
-    itemDiv.className = "item-cardapio";
-    itemDiv.innerHTML = `
-            <div class="item-nome">${item.nome}</div>
-            <div class="item-preco">R$ ${item.preco.toFixed(2)}</div>
-            ${item.descricao ? `<small style="color: #666;">${item.descricao.substring(0, 30)}...</small>` : ""}
-        `;
-
-    itemDiv.addEventListener("click", () => adicionarAoCarrinho(item));
-
-    container.appendChild(itemDiv);
-  });
-}
-
-function configurarEventos() {
-  // Eventos das categorias
-  document.querySelectorAll(".categoria-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      document
-        .querySelectorAll(".categoria-btn")
-        .forEach((b) => b.classList.remove("ativo"));
-      e.target.classList.add("ativo");
-      carregarItensCardapio(e.target.dataset.categoria);
+// ===== SOCKET.IO =====
+function setupSocket() {
+    const serverUrl = window.location.origin;
+    window.socket = io(serverUrl, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 10
     });
-  });
+    
+    socket.on('connect', () => {
+        console.log('✅ Conectado ao servidor');
+        mostrarNotificacao('Conectado ao servidor', 'success');
+    });
+    
+    socket.on('pedido-para-entrega', (pedidoId) => {
+        console.log('🍽️ Pedido pronto:', pedidoId);
+        buscarPedidosProntos();
+        mostrarNotificacao('Novo pedido pronto para entrega!', 'success');
+    });
+    
+    socket.on('pedido-confirmado', (data) => {
+        console.log('✅ Pedido confirmado:', data);
+    });
+}
 
-  // Botão enviar pedido
-  const btnEnviar = document.getElementById("btn-enviar");
-  if (btnEnviar) {
-    btnEnviar.addEventListener("click", enviarPedido);
-  }
+// ===== CARREGAR DADOS =====
+async function carregarCategorias() {
+    try {
+        const response = await fetch('/api/categorias');
+        state.categorias = await response.json();
+        
+        const container = document.getElementById('categorias');
+        container.innerHTML = '<button class="categoria-btn ativo" data-categoria="todos">Todos 📋</button>';
+        
+        state.categorias.forEach(cat => {
+            if (cat.ativo) {
+                const btn = document.createElement('button');
+                btn.className = 'categoria-btn';
+                btn.dataset.categoria = cat.id;
+                btn.innerHTML = `${cat.icone} ${cat.nome}`;
+                container.appendChild(btn);
+            }
+        });
+        
+        console.log('📋 Categorias carregadas:', state.categorias.length);
+    } catch (error) {
+        console.error('Erro ao carregar categorias:', error);
+    }
+}
 
-  // Observação com Enter (não enviar formulário)
-  const observacao = document.getElementById("observacao");
-  if (observacao) {
-    observacao.addEventListener("keypress", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        if (carrinho.length > 0 && mesaSelecionada) {
-          enviarPedido();
+async function carregarCardapio(categoriaId = 'todos') {
+    try {
+        const response = await fetch('/api/cardapio');
+        state.cardapio = await response.json();
+        
+        const container = document.getElementById('cardapio-grid');
+        container.innerHTML = '';
+        
+        let itensFiltrados = state.cardapio;
+        if (categoriaId !== 'todos') {
+            itensFiltrados = state.cardapio.filter(item => item.categoria_id == categoriaId);
         }
-      }
-    });
-  }
-
-  // Eventos do socket
-  if (typeof socket !== "undefined") {
-    socket.on("pedido-confirmado", (data) => {
-      mostrarNotificacao(
-        `✅ Pedido da mesa ${data.mesa} enviado com sucesso!`,
-        "sucesso",
-      );
-    });
-
-    socket.on("pedido-em-preparo", (pedidoId) => {
-      console.log("🔨 Pedido em preparo:", pedidoId);
-    });
-
-    socket.on("pedido-para-entrega", (pedido) => {
-      if (pedido.mesa === mesaSelecionada) {
-        mostrarNotificacao(
-          `🍽️ Pedido da mesa ${pedido.mesa} está pronto para entrega!`,
-          "info",
-        );
-      }
-    });
-  }
-}
-
-function selecionarMesa(numero) {
-  mesaSelecionada = numero;
-
-  const mesaTitulo = document.getElementById("mesa-titulo");
-  const mesaNumero = document.getElementById("mesa-numero");
-
-  if (mesaTitulo) mesaTitulo.textContent = `Mesa ${numero}`;
-  if (mesaNumero) mesaNumero.textContent = numero;
-
-  // Destacar mesa selecionada
-  document.querySelectorAll(".mesa-item").forEach((mesa) => {
-    mesa.style.background = "#e0e0e0";
-    mesa.style.color = "#333";
-  });
-
-  const mesaSelecionadaEl = document.querySelector(`[data-mesa="${numero}"]`);
-  if (mesaSelecionadaEl) {
-    mesaSelecionadaEl.style.background = "#4CAF50";
-    mesaSelecionadaEl.style.color = "white";
-  }
-
-  // Carregar pedidos anteriores da mesa (se houver)
-  carregarPedidosMesa(numero);
-
-  mostrarNotificacao(`Mesa ${numero} selecionada`, "info");
-}
-
-function carregarPedidosMesa(mesaNumero) {
-  // Verificar se há pedidos anteriores para esta mesa
-  const pedidosAnteriores = JSON.parse(
-    sessionStorage.getItem(`mesa_${mesaNumero}_pedidos`) || "[]",
-  );
-
-  if (pedidosAnteriores.length > 0) {
-    const ultimoPedido = pedidosAnteriores[pedidosAnteriores.length - 1];
-    if (ultimoPedido.itens && ultimoPedido.itens.length > 0) {
-      if (
-        confirm(
-          `Mesa ${mesaNumero} tem pedidos anteriores. Deseja carregar o último pedido?`,
-        )
-      ) {
-        carrinho = [...ultimoPedido.itens];
-        atualizarCarrinho();
-      }
+        
+        if (itensFiltrados.length === 0) {
+            container.innerHTML = '<p class="text-center" style="grid-column: 1/-1; padding: 40px;">📭 Nenhum item disponível</p>';
+            return;
+        }
+        
+        itensFiltrados.forEach(item => {
+            const card = document.createElement('div');
+            card.className = `item-card ${item.disponivel ? '' : 'indisponivel'}`;
+            card.innerHTML = `
+                <div class="item-nome">${item.nome}</div>
+                <div class="item-preco">${formatarPreco(item.preco)}</div>
+                ${item.descricao ? `<div class="item-desc">${item.descricao.substring(0, 30)}...</div>` : ''}
+                <div style="font-size: 0.75rem; color: #999; margin-top: 5px;">
+                    ⏱️ ${item.tempo_preparo}min
+                </div>
+            `;
+            
+            if (item.disponivel) {
+                card.addEventListener('click', () => adicionarAoCarrinho(item));
+            }
+            
+            container.appendChild(card);
+        });
+        
+        console.log('📋 Cardápio carregado:', itensFiltrados.length, 'itens');
+    } catch (error) {
+        console.error('Erro ao carregar cardápio:', error);
     }
-  }
 }
 
+async function carregarMesas() {
+    try {
+        const response = await fetch('/api/mesas');
+        state.mesas = await response.json();
+        
+        const container = document.getElementById('mesas-grid');
+        container.innerHTML = '';
+        
+        state.mesas.forEach(mesa => {
+            const card = document.createElement('div');
+            card.className = `mesa-card ${mesa.status}`;
+            card.dataset.mesa = mesa.id;
+            card.innerHTML = `
+                <div class="mesa-numero">${mesa.numero}</div>
+                <div class="mesa-status">${mesa.status === 'ocupada' ? '👥 Ocupada' : '✅ Livre'}</div>
+            `;
+            
+            card.addEventListener('click', () => selecionarMesa(mesa));
+            container.appendChild(card);
+        });
+        
+        document.getElementById('mesas-count').textContent = state.mesas.length;
+        console.log('🪑 Mesas carregadas:', state.mesas.length);
+    } catch (error) {
+        console.error('Erro ao carregar mesas:', error);
+    }
+}
+
+async function buscarPedidosProntos() {
+    try {
+        const response = await fetch('/api/pedidos/prontos');
+        const pedidos = await response.json();
+        
+        const panel = document.getElementById('prontos-panel');
+        const lista = document.getElementById('prontos-lista');
+        const count = document.getElementById('prontos-count');
+        
+        if (pedidos.length > 0) {
+            panel.style.display = 'block';
+            count.textContent = pedidos.length;
+            
+            lista.innerHTML = '';
+            pedidos.forEach(pedido => {
+                const card = document.createElement('div');
+                card.className = 'pronto-card';
+                card.innerHTML = `
+                    <div class="mesa">Mesa ${pedido.mesa_numero}</div>
+                    <div class="hora">${formatarData(pedido.created_at)}</div>
+                    <div style="margin-top: 10px;">
+                        <button class="btn btn-sm btn-primary" onclick="entregarPedido('${pedido.id}')">
+                            ✅ Entregar
+                        </button>
+                    </div>
+                `;
+                lista.appendChild(card);
+            });
+        } else {
+            panel.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Erro ao buscar pedidos prontos:', error);
+    }
+}
+
+// ===== FUNÇÕES DO CARRINHO =====
 function adicionarAoCarrinho(item) {
-  if (!mesaSelecionada) {
-    mostrarNotificacao("Selecione uma mesa primeiro!", "erro");
-    return;
-  }
-
-  // Verificar se item já está no carrinho
-  const itemExistente = carrinho.find((i) => i.id === item.id);
-
-  if (itemExistente) {
-    itemExistente.quantidade = (itemExistente.quantidade || 1) + 1;
-  } else {
-    carrinho.push({
-      ...item,
-      quantidade: 1,
-    });
-  }
-
-  atualizarCarrinho();
-  mostrarNotificacao(`${item.nome} adicionado ao carrinho`, "sucesso");
+    if (!state.mesaSelecionada) {
+        mostrarNotificacao('Selecione uma mesa primeiro!', 'error');
+        return;
+    }
+    
+    const existente = state.carrinho.find(i => i.id === item.id);
+    
+    if (existente) {
+        existente.quantidade = (existente.quantidade || 1) + 1;
+    } else {
+        state.carrinho.push({
+            ...item,
+            quantidade: 1
+        });
+    }
+    
+    atualizarCarrinho();
+    mostrarNotificacao(`${item.nome} adicionado`, 'success');
 }
 
 function removerDoCarrinho(index) {
-  const itemRemovido = carrinho[index];
-  carrinho.splice(index, 1);
-  atualizarCarrinho();
-  mostrarNotificacao(`${itemRemovido.nome} removido do carrinho`, "info");
+    const item = state.carrinho[index];
+    state.carrinho.splice(index, 1);
+    atualizarCarrinho();
+    mostrarNotificacao(`${item.nome} removido`, 'info');
 }
 
 function aumentarQuantidade(index) {
-  if (carrinho[index]) {
-    carrinho[index].quantidade = (carrinho[index].quantidade || 1) + 1;
-    atualizarCarrinho();
-  }
+    if (state.carrinho[index]) {
+        state.carrinho[index].quantidade++;
+        atualizarCarrinho();
+    }
 }
 
 function diminuirQuantidade(index) {
-  if (carrinho[index] && carrinho[index].quantidade > 1) {
-    carrinho[index].quantidade -= 1;
-    atualizarCarrinho();
-  } else {
-    removerDoCarrinho(index);
-  }
+    if (state.carrinho[index] && state.carrinho[index].quantidade > 1) {
+        state.carrinho[index].quantidade--;
+        atualizarCarrinho();
+    } else {
+        removerDoCarrinho(index);
+    }
 }
 
 function atualizarCarrinho() {
-  const container = document.getElementById("carrinho-itens");
-  const btnEnviar = document.getElementById("btn-enviar");
-  const totalItens = document.getElementById("total-itens");
-  const totalPreco = document.getElementById("total-preco");
-
-  if (!container) return;
-
-  container.innerHTML = "";
-
-  if (carrinho.length === 0) {
-    container.innerHTML =
-      '<p style="text-align: center; color: #999; padding: 20px;">🛒 Carrinho vazio</p>';
-    if (btnEnviar) btnEnviar.disabled = true;
-
-    // Atualizar totais
-    if (totalItens) totalItens.textContent = "0";
-    if (totalPreco) totalPreco.textContent = "R$ 0,00";
-    return;
-  }
-
-  let total = 0;
-  let quantidadeTotal = 0;
-
-  carrinho.forEach((item, index) => {
-    const subtotal = item.preco * (item.quantidade || 1);
-    total += subtotal;
-    quantidadeTotal += item.quantidade || 1;
-
-    const itemDiv = document.createElement("div");
-    itemDiv.className = "carrinho-item";
-    itemDiv.innerHTML = `
-            <div style="flex: 2;">
+    const container = document.getElementById('carrinho-itens');
+    const btnEnviar = document.getElementById('btn-enviar');
+    const countSpan = document.getElementById('carrinho-count');
+    const subtotalSpan = document.getElementById('subtotal');
+    const totalSpan = document.getElementById('total');
+    
+    container.innerHTML = '';
+    
+    if (state.carrinho.length === 0) {
+        container.innerHTML = '<p class="text-center" style="padding: 20px;">🛒 Carrinho vazio</p>';
+        btnEnviar.disabled = true;
+        countSpan.textContent = '0';
+        subtotalSpan.textContent = formatarPreco(0);
+        totalSpan.textContent = formatarPreco(0);
+        return;
+    }
+    
+    let subtotal = 0;
+    let totalItens = 0;
+    
+    state.carrinho.forEach((item, index) => {
+        const qtd = item.quantidade || 1;
+        const itemTotal = item.preco * qtd;
+        subtotal += itemTotal;
+        totalItens += qtd;
+        
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'carrinho-item';
+        itemDiv.innerHTML = `
+            <div class="item-info">
                 <strong>${item.nome}</strong>
+                <span class="item-subtotal">${formatarPreco(itemTotal)}</span>
             </div>
-            <div style="flex: 1; text-align: center;">
-                <button class="btn-qtd" onclick="diminuirQuantidade(${index})">-</button>
-                <span style="margin: 0 10px;">${item.quantidade || 1}</span>
-                <button class="btn-qtd" onclick="aumentarQuantidade(${index})">+</button>
-            </div>
-            <div style="flex: 1; text-align: right;">
-                R$ ${subtotal.toFixed(2)}
-                <span class="remover" onclick="removerDoCarrinho(${index})" style="margin-left: 10px;">❌</span>
+            <div class="item-acoes">
+                <button class="qtd-btn minus" onclick="diminuirQuantidade(${index})">-</button>
+                <span class="item-qtd">${qtd}</span>
+                <button class="qtd-btn" onclick="aumentarQuantidade(${index})">+</button>
+                <button class="qtd-btn minus" onclick="removerDoCarrinho(${index})" style="background: var(--danger);">×</button>
             </div>
         `;
-
-    container.appendChild(itemDiv);
-  });
-
-  // Adicionar estilo para botões de quantidade
-  const style = document.createElement("style");
-  style.textContent = `
-        .btn-qtd {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            width: 25px;
-            height: 25px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .btn-qtd:hover {
-            background: #45a049;
-        }
-    `;
-  document.head.appendChild(style);
-
-  // Atualizar totais
-  if (totalItens) totalItens.textContent = quantidadeTotal;
-  if (totalPreco) totalPreco.textContent = `R$ ${total.toFixed(2)}`;
-
-  if (btnEnviar) btnEnviar.disabled = false;
+        
+        container.appendChild(itemDiv);
+    });
+    
+    btnEnviar.disabled = false;
+    countSpan.textContent = totalItens;
+    subtotalSpan.textContent = formatarPreco(subtotal);
+    totalSpan.textContent = formatarPreco(subtotal);
 }
 
-function enviarPedido() {
-  if (!mesaSelecionada) {
-    mostrarNotificacao("Selecione uma mesa!", "erro");
-    return;
-  }
+// ===== FUNÇÕES DE MESA =====
+function selecionarMesa(mesa) {
+    state.mesaSelecionada = mesa;
+    
+    // Atualizar UI
+    document.querySelectorAll('.mesa-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    
+    const cardSelecionado = document.querySelector(`[data-mesa="${mesa.id}"]`);
+    if (cardSelecionado) {
+        cardSelecionado.classList.add('selected');
+    }
+    
+    document.getElementById('mesa-titulo').innerHTML = `
+        Mesa ${mesa.numero} 
+        <small style="font-size: 0.9rem; color: var(--gray); margin-left: 10px;">
+            ${mesa.status === 'ocupada' ? '👥 Ocupada' : '✅ Livre'}
+        </small>
+    `;
+    
+    mostrarNotificacao(`Mesa ${mesa.numero} selecionada`, 'info');
+}
 
-  if (carrinho.length === 0) {
-    mostrarNotificacao("Adicione itens ao carrinho!", "erro");
-    return;
-  }
-
-  const observacao = document.getElementById("observacao")?.value || "";
-
-  // Calcular total
-  const total = carrinho.reduce(
-    (acc, item) => acc + item.preco * (item.quantidade || 1),
-    0,
-  );
-
-  const pedido = {
-    id: Date.now().toString(),
-    mesa: mesaSelecionada,
-    itens: carrinho.map((item) => ({
-      ...item,
-      subtotal: item.preco * (item.quantidade || 1),
-    })),
-    observacao: observacao,
-    total: total,
-    horaPedido: new Date().toISOString(),
-    horaPedidoFormatada: new Date().toLocaleTimeString(),
-    status: "pendente",
-  };
-
-  // Salvar pedido no histórico da mesa
-  const pedidosMesa = JSON.parse(
-    sessionStorage.getItem(`mesa_${mesaSelecionada}_pedidos`) || "[]",
-  );
-  pedidosMesa.push(pedido);
-  sessionStorage.setItem(
-    `mesa_${mesaSelecionada}_pedidos`,
-    JSON.stringify(pedidosMesa),
-  );
-
-  // Enviar via socket
-  if (typeof socket !== "undefined") {
-    socket.emit("novo-pedido", pedido);
-    console.log("📤 Pedido enviado:", pedido);
-  } else {
-    console.error("❌ Socket não disponível");
-    mostrarNotificacao("Erro ao enviar pedido!", "erro");
-    return;
-  }
-
-  // Marcar mesa como ocupada
-  const mesaElement = document.querySelector(
-    `[data-mesa="${mesaSelecionada}"]`,
-  );
-  if (mesaElement) {
-    mesaElement.classList.add("ocupada");
-  }
-
-  // Limpar carrinho
-  carrinho = [];
-  atualizarCarrinho();
-
-  const observacaoInput = document.getElementById("observacao");
-  if (observacaoInput) observacaoInput.value = "";
-
-  // Mostrar resumo do pedido
-  mostrarResumoPedido(pedido);
+// ===== ENVIAR PEDIDO =====
+async function enviarPedido() {
+    if (!state.mesaSelecionada) {
+        mostrarNotificacao('Selecione uma mesa!', 'error');
+        return;
+    }
+    
+    if (state.carrinho.length === 0) {
+        mostrarNotificacao('Adicione itens ao carrinho!', 'error');
+        return;
+    }
+    
+    const observacao = document.getElementById('observacao').value;
+    const total = state.carrinho.reduce((acc, item) => 
+        acc + (item.preco * (item.quantidade || 1)), 0
+    );
+    
+    const pedido = {
+        mesa: state.mesaSelecionada.id,
+        itens: state.carrinho.map(item => ({
+            id: item.id,
+            nome: item.nome,
+            preco: item.preco,
+            quantidade: item.quantidade || 1
+        })),
+        observacao,
+        total
+    };
+    
+    try {
+        const response = await fetch('/api/pedidos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pedido)
+        });
+        
+        if (!response.ok) throw new Error('Erro ao enviar pedido');
+        
+        const data = await response.json();
+        
+        // Limpar carrinho
+        state.carrinho = [];
+        atualizarCarrinho();
+        document.getElementById('observacao').value = '';
+        
+        // Atualizar status da mesa
+        await carregarMesas();
+        
+        mostrarNotificacao(`✅ Pedido enviado com sucesso!`, 'success');
+        
+        // Mostrar resumo
+        mostrarResumoPedido({ ...pedido, id: data.id });
+        
+    } catch (error) {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro ao enviar pedido', 'error');
+    }
 }
 
 function mostrarResumoPedido(pedido) {
-  const resumoDiv = document.createElement("div");
-  resumoDiv.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: white;
-        padding: 30px;
-        border-radius: 10px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        z-index: 10000;
-        max-width: 500px;
-        width: 90%;
-        max-height: 80vh;
-        overflow-y: auto;
-    `;
-
-  let itensHtml = "";
-  pedido.itens.forEach((item) => {
-    itensHtml += `
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    
+    let itensHtml = '';
+    pedido.itens.forEach(item => {
+        itensHtml += `
             <tr>
                 <td>${item.nome}</td>
                 <td>${item.quantidade}x</td>
-                <td>R$ ${item.preco.toFixed(2)}</td>
-                <td>R$ ${(item.preco * item.quantidade).toFixed(2)}</td>
+                <td>${formatarPreco(item.preco * item.quantidade)}</td>
             </tr>
         `;
-  });
-
-  resumoDiv.innerHTML = `
-        <h2 style="color: #4CAF50; margin-bottom: 20px;">✅ Pedido Enviado!</h2>
-        <p><strong>Mesa:</strong> ${pedido.mesa}</p>
-        <p><strong>Hora:</strong> ${pedido.horaPedidoFormatada}</p>
-        <p><strong>Observação:</strong> ${pedido.observacao || "Sem observações"}</p>
-        
-        <table style="width: 100%; margin-top: 20px; border-collapse: collapse;">
+    });
+    
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h2>✅ Pedido Confirmado!</h2>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+        </div>
+        <div style="margin-bottom: 20px;">
+            <p><strong>Mesa:</strong> ${state.mesaSelecionada.numero}</p>
+            <p><strong>Hora:</strong> ${new Date().toLocaleTimeString()}</p>
+            <p><strong>Observação:</strong> ${pedido.observacao || 'Sem observações'}</p>
+        </div>
+        <table class="table">
             <thead>
-                <tr style="background: #f5f5f5;">
-                    <th style="padding: 10px; text-align: left;">Item</th>
-                    <th style="padding: 10px;">Qtd</th>
-                    <th style="padding: 10px;">Preço</th>
-                    <th style="padding: 10px;">Subtotal</th>
+                <tr>
+                    <th>Item</th>
+                    <th>Qtd</th>
+                    <th>Subtotal</th>
                 </tr>
             </thead>
             <tbody>
                 ${itensHtml}
             </tbody>
             <tfoot>
-                <tr style="background: #f0f0f0; font-weight: bold;">
-                    <td colspan="3" style="padding: 10px; text-align: right;">Total:</td>
-                    <td style="padding: 10px;">R$ ${pedido.total.toFixed(2)}</td>
+                <tr>
+                    <td colspan="2" style="text-align: right;"><strong>Total:</strong></td>
+                    <td><strong>${formatarPreco(pedido.total)}</strong></td>
                 </tr>
             </tfoot>
         </table>
-        
-        <button onclick="this.parentElement.remove()" style="
-            width: 100%;
-            padding: 15px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            margin-top: 20px;
-            cursor: pointer;
-            font-weight: bold;
-        ">Fechar</button>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" 
+                onclick="this.closest('.modal-overlay').remove()">
+            Fechar
+        </button>
     `;
-
-  // Adicionar overlay
-  const overlay = document.createElement("div");
-  overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.5);
-        z-index: 9999;
-    `;
-  overlay.onclick = () => {
-    overlay.remove();
-    resumoDiv.remove();
-  };
-
-  document.body.appendChild(overlay);
-  document.body.appendChild(resumoDiv);
-}
-
-function mostrarNotificacao(mensagem, tipo = "info") {
-  // Remover notificações anteriores
-  const notificacoesAntigas = document.querySelectorAll(".notificacao");
-  notificacoesAntigas.forEach((n) => n.remove());
-
-  const notificacao = document.createElement("div");
-  notificacao.className = "notificacao";
-
-  const cores = {
-    sucesso: "#4CAF50",
-    erro: "#f44336",
-    info: "#2196F3",
-  };
-
-  notificacao.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 25px;
-        background: ${cores[tipo] || cores.info};
-        color: white;
-        border-radius: 5px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 10001;
-        font-weight: bold;
-        animation: slideIn 0.3s ease;
-    `;
-
-  notificacao.textContent = mensagem;
-
-  document.body.appendChild(notificacao);
-
-  setTimeout(() => {
-    notificacao.style.animation = "slideOut 0.3s ease";
-    setTimeout(() => notificacao.remove(), 300);
-  }, 3000);
-}
-
-// Adicionar animações
-const style = document.createElement("style");
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
     
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-    }
-`;
-document.head.appendChild(style);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+}
 
-// Tornar funções globais para os botões
+// ===== CONFIGURAR EVENTOS =====
+function configurarEventos() {
+    // Eventos das categorias
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('categoria-btn')) {
+            document.querySelectorAll('.categoria-btn').forEach(btn => {
+                btn.classList.remove('ativo');
+            });
+            e.target.classList.add('ativo');
+            carregarCardapio(e.target.dataset.categoria);
+        }
+    });
+    
+    // Botão enviar
+    document.getElementById('btn-enviar').addEventListener('click', enviarPedido);
+    
+    // Enter no campo observação
+    document.getElementById('observacao').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (state.carrinho.length > 0 && state.mesaSelecionada) {
+                enviarPedido();
+            }
+        }
+    });
+}
+
+// ===== FUNÇÕES GLOBAIS =====
 window.removerDoCarrinho = removerDoCarrinho;
 window.aumentarQuantidade = aumentarQuantidade;
 window.diminuirQuantidade = diminuirQuantidade;
+window.entregarPedido = async (pedidoId) => {
+    try {
+        await fetch(`/api/pedidos/${pedidoId}/entregar`, { method: 'POST' });
+        mostrarNotificacao('Pedido entregue!', 'success');
+        buscarPedidosProntos();
+        carregarMesas();
+    } catch (error) {
+        console.error('Erro:', error);
+    }
+};
