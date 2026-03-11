@@ -1,107 +1,92 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>Login - Sistema Restaurante</title>
-
-<link rel="stylesheet" href="/css/global.css">
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistema Restaurante</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .opcoes-acesso {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .btn-acesso {
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            text-align: center;
+        }
+        .btn-acesso:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .btn-garcom {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-cozinha {
+            background: #FF9800;
+            color: white;
+        }
+        .btn-admin {
+            background: #f44336;
+            color: white;
+            grid-column: span 2;
+        }
+        .info-sistema {
+            margin-top: 30px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
 </head>
-
 <body>
-
-<div class="login-page">
-
-<div class="login-card">
-
-<h1>🍽️ Restaurante</h1>
-<p>Faça login</p>
-
-<div id="loginError" style="display:none;color:red"></div>
-
-<form id="loginForm">
-
-<input
-type="text"
-id="usuario"
-placeholder="Usuário"
-required
-/>
-
-<input
-type="password"
-id="senha"
-placeholder="Senha"
-required
-/>
-
-<button type="submit" id="btnLogin">
-Entrar
-</button>
-
-</form>
-
-</div>
-
-</div>
-
-<script>
-
-const form = document.getElementById("loginForm");
-
-form.addEventListener("submit", async (e)=>{
-
-e.preventDefault();
-
-const usuario = document.getElementById("usuario").value.trim();
-const senha = document.getElementById("senha").value.trim();
-const error = document.getElementById("loginError");
-
-error.style.display="none";
-
-try{
-
-const response = await fetch("/api/login",{
-method:"POST",
-headers:{ "Content-Type":"application/json"},
-body:JSON.stringify({usuario,senha})
-});
-
-const data = await response.json();
-
-if(!response.ok){
-throw new Error(data.erro || "Erro login");
-}
-
-switch(data.tipo){
-
-case "admin":
-window.location="/admin/painel-admin.html"
-break;
-
-case "garcom":
-window.location="/garcom/dashboard-garcom.html"
-break;
-
-case "cozinha":
-window.location="/cozinha/tela-cozinha.html"
-break;
-
-}
-
-}catch(err){
-
-error.innerText = err.message;
-error.style.display="block";
-
-}
-
-});
-
-</script>
-
+    <div class="login-container">
+        <h1>🍽️ Sistema do Restaurante</h1>
+        <p style="text-align: center; margin-bottom: 20px;">Escolha seu acesso:</p>
+        
+        <div class="opcoes-acesso">
+            <a href="/garcom/dashboard-garcom.html" class="btn-acesso btn-garcom">👨‍🍳 Garçom</a>
+            <a href="/cozinha/tela-cozinha.html" class="btn-acesso btn-cozinha">👩‍🍳 Cozinha</a>
+            <a href="/admin/painel-admin.html" class="btn-acesso btn-admin">⚙️ Administrador</a>
+        </div>
+        
+        <div class="info-sistema">
+            <p>Sistema de Pedidos em Tempo Real v1.0</p>
+        </div>
+    </div>
 </body>
 </html>
