@@ -1,4 +1,3 @@
-require('dotenv').config();  
 
 const express = require('express');
 const http = require('http');
@@ -8,6 +7,9 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
+
+// 👇 ADICIONA ISSO AQUI!
+require('dotenv').config();
 
 // ===== CONFIGURAÇÃO DO BANCO DE DADOS =====
 const isProduction = process.env.NODE_ENV === 'production';
