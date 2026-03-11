@@ -1,132 +1,207 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cozinha - Sistema Restaurante</title>
-<link rel="stylesheet" href="/css/cozinha.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cozinha - Sistema Restaurante</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #333;
+            color: white;
+        }
+        .header {
+            background: #FF9800;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 32px;
+        }
+        .btn-sair {
+            background: rgba(0,0,0,0.2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            text-decoration: none;
+        }
+        .btn-sair:hover {
+            background: rgba(0,0,0,0.3);
+        }
+        .status-bar {
+            background: #444;
+            padding: 10px 20px;
+            display: flex;
+            gap: 20px;
+            font-size: 18px;
+        }
+        .status-bar span {
+            background: #555;
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 130px);
+        }
+        .coluna {
+            background: #444;
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .coluna h2 {
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .coluna.pendente h2 {
+            background: #f44336;
+        }
+        .coluna.preparando h2 {
+            background: #ff9800;
+        }
+        .coluna.pronto h2 {
+            background: #4CAF50;
+        }
+        .pedidos-lista {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .pedido-card {
+            background: #555;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            border-left: 5px solid transparent;
+        }
+        .pedido-card.pendente {
+            border-left-color: #f44336;
+        }
+        .pedido-card.preparando {
+            border-left-color: #ff9800;
+        }
+        .pedido-card.pronto {
+            border-left-color: #4CAF50;
+        }
+        .pedido-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #666;
+        }
+        .mesa-numero {
+            font-size: 24px;
+            font-weight: bold;
+            background: #666;
+            padding: 5px 15px;
+            border-radius: 5px;
+        }
+        .tempo-pedido {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff9800;
+        }
+        .tempo-pedido.atrasado {
+            color: #f44336;
+        }
+        .itens-pedido {
+            margin: 10px 0;
+        }
+        .item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+        .observacao {
+            background: #666;
+            padding: 8px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-style: italic;
+            color: #ffd700;
+        }
+        .acoes-pedido {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .btn-acao {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        .btn-iniciar {
+            background: #ff9800;
+            color: white;
+        }
+        .btn-iniciar:hover {
+            background: #f57c00;
+        }
+        .btn-pronto {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-pronto:hover {
+            background: #45a049;
+        }
+    </style>
 </head>
-
 <body>
+    <div class="header">
+        <h1>👩‍🍳 Tela da Cozinha</h1>
+        <a href="/login.html" class="btn-sair">Sair</a>
+    </div>
 
-<header class="topbar">
-<h1>👨‍🍳 Tela da Cozinha</h1>
+    <div class="status-bar">
+        <span id="hora-atual"></span>
+        <span id="pedidos-pendentes">Pendentes: 0</span>
+        <span id="pedidos-preparando">Preparando: 0</span>
+        <span id="pedidos-prontos">Prontos: 0</span>
+    </div>
 
-<div class="user-info">
-<div class="user-avatar">👨‍🍳</div>
+    <div class="container">
+        <div class="coluna pendente">
+            <h2>📝 Pendentes</h2>
+            <div class="pedidos-lista" id="pendentes-lista"></div>
+        </div>
+        <div class="coluna preparando">
+            <h2>👨‍🍳 Em Preparo</h2>
+            <div class="pedidos-lista" id="preparando-lista"></div>
+        </div>
+        <div class="coluna pronto">
+            <h2>✅ Prontos</h2>
+            <div class="pedidos-lista" id="prontos-lista"></div>
+        </div>
+    </div>
 
-<div>
-<div class="user-name" id="usuario-nome-header">Cozinha</div>
-<div class="user-role">Chef</div>
-</div>
-
-</div>
-</header>
-
-<main class="container">
-
-<section class="coluna">
-<h2>🆕 Pedidos Pendentes</h2>
-<div id="lista-pendentes"></div>
-</section>
-
-<section class="coluna">
-<h2>🔥 Em Preparo</h2>
-<div id="lista-preparo"></div>
-</section>
-
-<section class="coluna">
-<h2>✅ Prontos</h2>
-<div id="lista-prontos"></div>
-</section>
-
-</main>
-
-<script src="/socket.io/socket.io.js"></script>
-
-<script>
-
-const socket = io();
-
-const listaPendentes=document.getElementById("lista-pendentes");
-const listaPreparo=document.getElementById("lista-preparo");
-const listaProntos=document.getElementById("lista-prontos");
-
-socket.emit("solicitar-pedidos");
-
-socket.on("carregar-pedidos",(dados)=>{
-dados.pendentes.forEach(p=>renderPendentes(p));
-dados.preparando.forEach(p=>renderPreparo(p));
-dados.prontos.forEach(p=>renderPronto(p));
-});
-
-socket.on("pedido-para-cozinha",(pedido)=>{
-renderPendentes(pedido);
-});
-
-socket.on("pedido-em-preparo",(pedidoId)=>{
-const el=document.getElementById("pedido-"+pedidoId);
-if(!el)return;
-listaPreparo.appendChild(el);
-});
-
-socket.on("pedido-para-entrega",(pedido)=>{
-const el=document.getElementById("pedido-"+pedido.id);
-if(!el)return;
-listaProntos.appendChild(el);
-});
-
-function renderPendentes(p){
-const div=document.createElement("div");
-div.className="pedido";
-div.id="pedido-"+p.id;
-
-div.innerHTML=`
-<h3>Mesa ${p.mesa}</h3>
-<ul>${p.itens.map(i=>`<li>${i}</li>`).join("")}</ul>
-<button onclick="iniciarPreparo('${p.id}')">Iniciar preparo</button>
-`;
-
-listaPendentes.appendChild(div);
-}
-
-function renderPreparo(p){
-const div=document.createElement("div");
-div.className="pedido";
-div.id="pedido-"+p.id;
-
-div.innerHTML=`
-<h3>Mesa ${p.mesa}</h3>
-<ul>${p.itens.map(i=>`<li>${i}</li>`).join("")}</ul>
-<button onclick="finalizarPedido('${p.id}')">Pedido pronto</button>
-`;
-
-listaPreparo.appendChild(div);
-}
-
-function renderPronto(p){
-const div=document.createElement("div");
-div.className="pedido";
-div.id="pedido-"+p.id;
-
-div.innerHTML=`
-<h3>Mesa ${p.mesa}</h3>
-<ul>${p.itens.map(i=>`<li>${i}</li>`).join("")}</ul>
-<span>Pronto para entrega</span>
-`;
-
-listaProntos.appendChild(div);
-}
-
-function iniciarPreparo(id){
-socket.emit("iniciar-preparo",id);
-}
-
-function finalizarPedido(id){
-socket.emit("pedido-pronto",id);
-}
-
-</script>
-
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="/js/socket-client.js"></script>
+    <script src="/js/cozinha.js"></script>
 </body>
 </html>
