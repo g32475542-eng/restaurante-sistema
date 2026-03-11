@@ -228,22 +228,26 @@
         </div>
     </div>
 
-    <script>
+  <script>
+document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('loginForm');
     const errorDiv = document.getElementById('loginError');
     const btn = document.getElementById('btnLogin');
     const spinner = document.getElementById('loadingSpinner');
     const btnText = document.getElementById('btnText');
 
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault(); // IMPEDE O RECARREGAMENTO DA PÁGINA
+    form.addEventListener('submit', async function(e) {
+        // IMPEDE O COMPORTAMENTO PADRÃO DE MÚLTIPLAS FORMAS
+        e.preventDefault();
+        e.stopPropagation();
         
         const usuario = document.getElementById('usuario').value;
         const senha = document.getElementById('senha').value;
 
+        // Validação básica
         if (!usuario || !senha) {
             mostrarErro('Preencha todos os campos!');
-            return;
+            return false;
         }
 
         // Mostrar loading
@@ -256,6 +260,7 @@
             const response = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ usuario, senha })
             });
 
@@ -267,7 +272,7 @@
 
             console.log('✅ Login bem sucedido:', data);
             
-            // REDIRECIONAMENTO MANUAL
+            // Redirecionamento
             switch(data.tipo) {
                 case 'admin':
                     window.location.href = '/admin';
@@ -291,6 +296,8 @@
             spinner.style.display = 'none';
             btnText.textContent = 'Entrar';
         }
+        
+        return false; // Garantia extra
     });
 
     function mostrarErro(mensagem) {
@@ -301,13 +308,7 @@
             errorDiv.style.display = 'none';
         }, 3000);
     }
-
-    // Enter no campo senha
-    document.getElementById('senha').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            form.dispatchEvent(new Event('submit'));
-        }
-    });
+});
 </script>
 </body>
 </html>
