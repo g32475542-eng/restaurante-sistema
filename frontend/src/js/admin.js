@@ -49,10 +49,10 @@ async function carregarTudo() {
             carregarConfig()
         ]);
         console.log('✅ Todos os dados carregados');
-        mostrarNotificacao('Dados carregados com sucesso!', 'success');
+        alert('Dados carregados com sucesso!');
     } catch (error) {
         console.error('❌ Erro ao carregar dados:', error);
-        mostrarNotificacao('Erro ao carregar dados', 'error');
+        alert('Erro ao carregar dados');
     }
 }
 
@@ -127,7 +127,7 @@ document.getElementById('form-categoria')?.addEventListener('submit', async (e) 
     
     const nome = document.getElementById('cat-nome')?.value;
     if (!nome) {
-        mostrarNotificacao('Nome da categoria é obrigatório!', 'error');
+        alert('Nome da categoria é obrigatório!');
         return;
     }
     
@@ -150,12 +150,12 @@ document.getElementById('form-categoria')?.addEventListener('submit', async (e) 
             throw new Error(erro.erro || 'Erro ao salvar');
         }
         
-        mostrarNotificacao('Categoria criada com sucesso!', 'success');
+        alert('Categoria criada com sucesso!');
         limparFormCategoria();
         await carregarCategorias();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao criar categoria: ' + error.message, 'error');
+        alert('Erro ao criar categoria: ' + error.message);
     }
 });
 
@@ -184,11 +184,11 @@ window.toggleCategoria = async (id) => {
         
         if (!response.ok) throw new Error('Erro ao atualizar');
         
-        mostrarNotificacao(`Categoria ${cat.ativo ? 'desativada' : 'ativada'}!`, 'success');
+        alert(`Categoria ${cat.ativo ? 'desativada' : 'ativada'}!`);
         await carregarCategorias();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao atualizar categoria', 'error');
+        alert('Erro ao atualizar categoria');
     }
 };
 
@@ -202,11 +202,11 @@ window.excluirCategoria = async (id) => {
         
         if (!response.ok) throw new Error('Erro ao excluir');
         
-        mostrarNotificacao('Categoria excluída!', 'success');
+        alert('Categoria excluída!');
         await carregarCategorias();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao excluir categoria', 'error');
+        alert('Erro ao excluir categoria');
     }
 };
 
@@ -273,7 +273,7 @@ document.getElementById('form-item')?.addEventListener('submit', async (e) => {
     const categoria_id = document.getElementById('item-categoria')?.value;
     
     if (!nome || !preco || !categoria_id) {
-        mostrarNotificacao('Nome, preço e categoria são obrigatórios!', 'error');
+        alert('Nome, preço e categoria são obrigatórios!');
         return;
     }
     
@@ -301,12 +301,12 @@ document.getElementById('form-item')?.addEventListener('submit', async (e) => {
             throw new Error(erro.erro || 'Erro ao salvar');
         }
         
-        mostrarNotificacao(`Item ${item.id ? 'atualizado' : 'criado'} com sucesso!`, 'success');
+        alert(`Item ${item.id ? 'atualizado' : 'criado'} com sucesso!`);
         limparFormItem();
         await carregarCardapio();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao salvar item: ' + error.message, 'error');
+        alert('Erro ao salvar item: ' + error.message);
     }
 });
 
@@ -337,11 +337,11 @@ window.toggleItem = async (id) => {
         
         if (!response.ok) throw new Error('Erro ao atualizar');
         
-        mostrarNotificacao(`Item ${item.disponivel ? 'indisponível' : 'disponível'}!`, 'success');
+        alert(`Item ${item.disponivel ? 'indisponível' : 'disponível'}!`);
         await carregarCardapio();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao atualizar item', 'error');
+        alert('Erro ao atualizar item');
     }
 };
 
@@ -355,11 +355,11 @@ window.excluirItem = async (id) => {
         
         if (!response.ok) throw new Error('Erro ao excluir');
         
-        mostrarNotificacao('Item excluído!', 'success');
+        alert('Item excluído!');
         await carregarCardapio();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao excluir item', 'error');
+        alert('Erro ao excluir item');
     }
 };
 
@@ -420,7 +420,7 @@ document.getElementById('form-mesa')?.addEventListener('submit', async (e) => {
     const numero = document.getElementById('mesa-numero')?.value;
     
     if (!numero) {
-        mostrarNotificacao('Número da mesa é obrigatório!', 'error');
+        alert('Número da mesa é obrigatório!');
         return;
     }
     
@@ -436,12 +436,12 @@ document.getElementById('form-mesa')?.addEventListener('submit', async (e) => {
             throw new Error(erro.erro || 'Erro ao criar mesa');
         }
         
-        mostrarNotificacao('Mesa criada com sucesso!', 'success');
+        alert('Mesa criada com sucesso!');
         document.getElementById('mesa-numero').value = '';
         await carregarMesas();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao criar mesa: ' + error.message, 'error');
+        alert('Erro ao criar mesa: ' + error.message);
     }
 });
 
@@ -455,11 +455,11 @@ window.excluirMesa = async (id) => {
         
         if (!response.ok) throw new Error('Erro ao excluir');
         
-        mostrarNotificacao('Mesa excluída!', 'success');
+        alert('Mesa excluída!');
         await carregarMesas();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao excluir mesa', 'error');
+        alert('Erro ao excluir mesa');
     }
 };
 
@@ -473,7 +473,7 @@ async function carregarUsuarios() {
         console.log('👥 Usuários carregados:', state.usuarios.length);
     } catch (error) {
         console.error('Erro ao carregar usuários:', error);
-        mostrarNotificacao('Erro ao carregar usuários', 'error');
+        alert('Erro ao carregar usuários');
     }
 }
 
@@ -526,18 +526,18 @@ function getTipoIcon(tipo) {
     }
 }
 
-// ===== FORMULÁRIO DE USUÁRIO - CORRIGIDO =====
+// ===== FORMULÁRIO DE USUÁRIO - TOTALMENTE CORRIGIDO =====
 document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    // PEGAR VALORES COM OS IDs CORRETOS
+    // PEGAR VALORES DIRETAMENTE DOS CAMPOS (IDs CORRETOS)
     const id = document.getElementById('usuario-id')?.value;
-    const nome = document.getElementById('usuario-nome')?.value;  // ← CORRIGIDO!
+    const nome = document.getElementById('usuario-nome')?.value;  // ← ID CORRETO
     const usuario = document.getElementById('usuario-login')?.value;
     const senha = document.getElementById('usuario-senha')?.value;
     const tipo = document.getElementById('usuario-tipo')?.value;
 
-    console.log('📝 Dados do formulário:', { id, nome, usuario, senha: senha ? '****' : '', tipo });
+    console.log('📝 Valores:', { id, nome, usuario, senha: senha ? '****' : '', tipo });
 
     // VALIDAÇÕES
     if (!nome || nome.trim() === '') {
@@ -571,7 +571,7 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
         dados.senha = senha.trim();
     }
 
-    console.log('📦 Enviando dados para API:', dados);
+    console.log('📦 Enviando:', dados);
 
     try {
         const url = id ? `/api/usuarios/${id}` : '/api/usuarios';
@@ -583,11 +583,10 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
             body: JSON.stringify(dados)
         });
 
-        const respostaData = await response.json();
-        console.log('📥 Resposta da API:', respostaData);
+        const resposta = await response.json();
 
         if (!response.ok) {
-            throw new Error(respostaData.erro || 'Erro ao salvar');
+            throw new Error(resposta.erro || 'Erro ao salvar');
         }
 
         alert('✅ Usuário salvo com sucesso!');
@@ -772,11 +771,6 @@ function configurarBuscas() {
             linha.style.display = texto.includes(termo) ? '' : 'none';
         });
     });
-}
-
-// ===== FUNÇÕES AUXILIARES =====
-function mostrarNotificacao(mensagem, tipo = 'info') {
-    alert(mensagem);
 }
 
 // ===== ATUALIZAÇÃO PERIÓDICA =====
