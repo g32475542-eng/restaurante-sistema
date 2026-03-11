@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
     carregarTudo();
     configurarEventos();
     configurarBuscas();
+    
+    // DEBUG: Mostrar todos os campos do formulário de usuário
+    setTimeout(() => {
+        const form = document.getElementById('form-usuario');
+        if (form) {
+            console.log('📋 Campos do formulário de usuário:');
+            const inputs = form.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                console.log(`   ID: ${input.id}, Tipo: ${input.type}, Valor: ${input.value || '(vazio)'}`);
+            });
+        }
+    }, 1000);
 });
 
 // ===== CARREGAR TODOS OS DADOS =====
@@ -429,11 +441,6 @@ document.getElementById('form-mesa')?.addEventListener('submit', async (e) => {
     }
 });
 
-window.editarMesa = async (id) => {
-    // Implementar edição de mesa se necessário
-    console.log('Editar mesa:', id);
-};
-
 window.excluirMesa = async (id) => {
     if (!confirm('Tem certeza que deseja excluir esta mesa?')) return;
     
@@ -515,39 +522,58 @@ function getTipoIcon(tipo) {
     }
 }
 
-// Evento do formulário de usuário - VERSÃO CORRIGIDA COM ALERT SIMPLES
+// Evento do formulário de usuário - VERSÃO CORRIGIDA
 document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
+    console.log('🔍 Iniciando salvamento de usuário...');
+    
     // Pegar valores dos campos
     const id = document.getElementById('usuario-id')?.value;
-    const nome = document.getElementById('usuario-nome')?.value;
-    const usuario = document.getElementById('usuario-login')?.value;
-    const senha = document.getElementById('usuario-senha')?.value;
-    const tipo = document.getElementById('usuario-tipo')?.value;
+    
+    // DEBUG: Verificar se os campos existem
+    const campoNome = document.getElementById('usuario-nome');
+    const campoLogin = document.getElementById('usuario-login');
+    const campoSenha = document.getElementById('usuario-senha');
+    const campoTipo = document.getElementById('usuario-tipo');
+    
+    console.log('📋 Campos do formulário:', {
+        nome: campoNome,
+        login: campoLogin,
+        senha: campoSenha,
+        tipo: campoTipo
+    });
+    
+    // Pegar valores
+    const nome = campoNome?.value;
+    const usuario = campoLogin?.value;
+    const senha = campoSenha?.value;
+    const tipo = campoTipo?.value;
 
-    // VALIDAÇÕES SIMPLES
+    console.log('📝 Valores capturados:', { id, nome, usuario, senha: senha ? '****' : '', tipo });
+
+    // VALIDAÇÕES
     if (!nome || nome.trim() === '') {
-        alert('⚠️ Nome é obrigatório!');
+        mostrarNotificacao('Nome é obrigatório!', 'error');
         return;
     }
 
     if (!usuario || usuario.trim() === '') {
-        alert('⚠️ Usuário é obrigatório!');
+        mostrarNotificacao('Usuário é obrigatório!', 'error');
         return;
     }
 
     if (!tipo) {
-        alert('⚠️ Tipo de usuário é obrigatório!');
+        mostrarNotificacao('Tipo de usuário é obrigatório!', 'error');
         return;
     }
 
     if (!id && (!senha || senha.trim() === '')) {
-        alert('⚠️ Senha é obrigatória para novo usuário!');
+        mostrarNotificacao('Senha é obrigatória para novo usuário!', 'error');
         return;
     }
 
-    // Montar objeto
+    // Montar objeto com os dados
     const dados = {
         nome: nome.trim(),
         usuario: usuario.trim(),
@@ -557,6 +583,8 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
     if (senha && senha.trim() !== '') {
         dados.senha = senha.trim();
     }
+
+    console.log('📦 Enviando dados para API:', dados);
 
     try {
         const url = id ? `/api/usuarios/${id}` : '/api/usuarios';
@@ -569,12 +597,13 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
         });
 
         const respostaData = await response.json();
+        console.log('📥 Resposta da API:', respostaData);
 
         if (!response.ok) {
             throw new Error(respostaData.erro || 'Erro ao salvar');
         }
 
-        alert('✅ Usuário salvo com sucesso!');
+        mostrarNotificacao(`Usuário ${id ? 'atualizado' : 'criado'} com sucesso!`, 'success');
         
         // Limpar formulário
         document.getElementById('usuario-id').value = '';
@@ -587,7 +616,7 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
         
     } catch (error) {
         console.error('❌ Erro:', error);
-        alert('❌ Erro: ' + error.message);
+        mostrarNotificacao('Erro: ' + error.message, 'error');
     }
 });
 
@@ -606,7 +635,7 @@ window.editarUsuario = (id) => {
 
 window.excluirUsuario = async (id) => {
     if (id === 1) {
-        alert('❌ Não é possível excluir o administrador principal');
+        mostrarNotificacao('Não é possível excluir o administrador principal', 'error');
         return;
     }
     
@@ -622,11 +651,11 @@ window.excluirUsuario = async (id) => {
             throw new Error(erro.erro || 'Erro ao excluir');
         }
         
-        alert('✅ Usuário excluído!');
+        mostrarNotificacao('Usuário excluído!', 'success');
         await carregarUsuarios();
     } catch (error) {
         console.error('Erro:', error);
-        alert('❌ Erro: ' + error.message);
+        mostrarNotificacao('Erro ao excluir usuário: ' + error.message, 'error');
     }
 };
 
@@ -698,14 +727,14 @@ document.getElementById('form-config')?.addEventListener('submit', async (e) => 
         
         if (!response.ok) throw new Error('Erro ao salvar');
         
-        alert('✅ Configurações salvas!');
+        mostrarNotificacao('Configurações salvas!', 'success');
         
         document.documentElement.style.setProperty('--primary', config.cor_primaria);
         document.documentElement.style.setProperty('--secondary', config.cor_secundaria);
         
     } catch (error) {
         console.error('Erro:', error);
-        alert('❌ Erro ao salvar configurações');
+        mostrarNotificacao('Erro ao salvar configurações', 'error');
     }
 });
 
@@ -768,8 +797,18 @@ function configurarBuscas() {
 
 // ===== FUNÇÕES AUXILIARES =====
 function mostrarNotificacao(mensagem, tipo = 'info') {
-    // Usando alert por enquanto para simplificar
-    alert(mensagem);
+    const notificacoesAntigas = document.querySelectorAll('.notification');
+    notificacoesAntigas.forEach(n => n.remove());
+    
+    const notificacao = document.createElement('div');
+    notificacao.className = `notification ${tipo}`;
+    notificacao.textContent = mensagem;
+    document.body.appendChild(notificacao);
+    
+    setTimeout(() => {
+        notificacao.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notificacao.remove(), 300);
+    }, 3000);
 }
 
 // ===== ATUALIZAÇÃO PERIÓDICA =====
@@ -778,3 +817,4 @@ setInterval(() => {
         carregarStats();
     }
 }, 30000);
+ muda ai
