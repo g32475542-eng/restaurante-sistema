@@ -3,11 +3,31 @@ const http = require('http');
 const socketIO = require('socket.io');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
-const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
+
+// ===== CONFIGURAÇÃO DO BANCO DE DADOS =====
+const isProduction = process.env.NODE_ENV === 'production';
+
+let db;
+let pg;
+
+if (isProduction) {
+  // Em produção (Render): usar PostgreSQL
+  const { Pool } = require('pg');
+  pg = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  db = pg;
+  console.log('✅ Conectado ao PostgreSQL (produção)');
+} else {
+  // Em desenvolvimento (local): usar SQLite
+  const sqlite3 = require('sqlite3').verbose();
+  db = new sqlite3.Database('./database/restaurante.db');
+  console.log('✅ Conectado ao SQLite (desenvolvimento)');
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -30,181 +50,291 @@ app.use(session({
   cookie: { 
     maxAge: 30 * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    secure: false
+    secure: isProduction
   }
 }));
 
-// ========== BANCO DE DADOS ==========
-const dbDir = path.join(__dirname, 'database');
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+// ========== FUNÇÕES AUXILIARES PARA QUERIES ==========
+async function query(sql, params = []) {
+  if (isProduction) {
+    const result = await db.query(sql, params);
+    return result.rows;
+  } else {
+    return new Promise((resolve, reject) => {
+      db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  }
 }
 
-const dbPath = path.join(dbDir, 'restaurante.db');
-const db = new sqlite3.Database(dbPath);
-
-// Criar tabelas e inserir dados
-db.serialize(() => {
-  // Tabela de usuários
-  db.run(`CREATE TABLE IF NOT EXISTS usuarios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT NOT NULL,
-    usuario TEXT UNIQUE NOT NULL,
-    senha TEXT NOT NULL,
-    tipo TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // Tabela de categorias
-  db.run(`CREATE TABLE IF NOT EXISTS categorias (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT UNIQUE NOT NULL,
-    icone TEXT DEFAULT '📋',
-    cor TEXT DEFAULT '#4CAF50',
-    ordem INTEGER DEFAULT 0,
-    ativo INTEGER DEFAULT 1
-  )`);
-
-  // Tabela de cardápio
-  db.run(`CREATE TABLE IF NOT EXISTS cardapio (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT NOT NULL,
-    preco REAL NOT NULL,
-    categoria_id INTEGER,
-    descricao TEXT,
-    disponivel INTEGER DEFAULT 1,
-    tempo_preparo INTEGER DEFAULT 15,
-    FOREIGN KEY (categoria_id) REFERENCES categorias (id)
-  )`);
-
-  // Tabela de mesas
-  db.run(`CREATE TABLE IF NOT EXISTS mesas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numero INTEGER UNIQUE NOT NULL,
-    status TEXT DEFAULT 'livre',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // Tabela de pedidos
-  db.run(`CREATE TABLE IF NOT EXISTS pedidos (
-    id TEXT PRIMARY KEY,
-    mesa_id INTEGER,
-    garcom_id INTEGER,
-    total REAL DEFAULT 0,
-    status TEXT DEFAULT 'pendente',
-    observacao TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME,
-    FOREIGN KEY (mesa_id) REFERENCES mesas (id),
-    FOREIGN KEY (garcom_id) REFERENCES usuarios (id)
-  )`);
-
-  // Tabela de itens do pedido
-  db.run(`CREATE TABLE IF NOT EXISTS pedido_itens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pedido_id TEXT,
-    item_id INTEGER,
-    nome TEXT NOT NULL,
-    preco REAL NOT NULL,
-    quantidade INTEGER DEFAULT 1,
-    observacao TEXT,
-    status TEXT DEFAULT 'pendente',
-    FOREIGN KEY (pedido_id) REFERENCES pedidos (id)
-  )`);
-
-  // Tabela de configurações
-  db.run(`CREATE TABLE IF NOT EXISTS configuracoes (
-    chave TEXT PRIMARY KEY,
-    valor TEXT,
-    tipo TEXT DEFAULT 'texto'
-  )`);
-
-  // Limpar e recriar usuários (garantia)
-  db.run("DELETE FROM usuarios");
-  
-  // Inserir usuários
-  const salt = bcrypt.genSaltSync(10);
-  const senhaAdmin = bcrypt.hashSync('123456', salt);
-  const senhaJoao = bcrypt.hashSync('123456', salt);
-  const senhaMaria = bcrypt.hashSync('123456', salt);
-  
-  db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-    ['Administrador', 'admin', senhaAdmin, 'admin']);
-  
-  db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-    ['João Garçom', 'joao', senhaJoao, 'garcom']);
-  
-  db.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-    ['Maria Cozinha', 'maria', senhaMaria, 'cozinha']);
-
-  // Inserir categorias
-  db.get("SELECT COUNT(*) as count FROM categorias", (err, row) => {
-    if (row.count === 0) {
-      const categorias = [
-        ['Entradas', '🥗', '#4CAF50', 1],
-        ['Pratos', '🍽️', '#FF5722', 2],
-        ['Bebidas', '🥤', '#2196F3', 3],
-        ['Sobremesas', '🍰', '#9C27B0', 4]
-      ];
-      categorias.forEach(cat => {
-        db.run("INSERT INTO categorias (nome, icone, cor, ordem) VALUES (?, ?, ?, ?)", cat);
+async function queryOne(sql, params = []) {
+  if (isProduction) {
+    const result = await db.query(sql, params);
+    return result.rows[0];
+  } else {
+    return new Promise((resolve, reject) => {
+      db.get(sql, params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
       });
-    }
-  });
+    });
+  }
+}
 
-  // Inserir mesas
-  db.get("SELECT COUNT(*) as count FROM mesas", (err, row) => {
-    if (row.count === 0) {
-      for (let i = 1; i <= 20; i++) {
-        db.run("INSERT INTO mesas (numero, status) VALUES (?, ?)", [i, 'livre']);
+async function run(sql, params = []) {
+  if (isProduction) {
+    const result = await db.query(sql, params);
+    return { lastID: result.rows[0]?.id };
+  } else {
+    return new Promise((resolve, reject) => {
+      db.run(sql, params, function(err) {
+        if (err) reject(err);
+        else resolve({ lastID: this.lastID });
+      });
+    });
+  }
+}
+
+// ========== CRIAR TABELAS ==========
+async function criarTabelas() {
+  if (isProduction) {
+    // PostgreSQL
+    await query(`
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        usuario TEXT UNIQUE NOT NULL,
+        senha TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS categorias (
+        id SERIAL PRIMARY KEY,
+        nome TEXT UNIQUE NOT NULL,
+        icone TEXT DEFAULT '📋',
+        cor TEXT DEFAULT '#4CAF50',
+        ordem INTEGER DEFAULT 0,
+        ativo INTEGER DEFAULT 1
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS cardapio (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        preco DECIMAL(10,2) NOT NULL,
+        categoria_id INTEGER REFERENCES categorias(id),
+        descricao TEXT,
+        disponivel INTEGER DEFAULT 1,
+        tempo_preparo INTEGER DEFAULT 15
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS mesas (
+        id SERIAL PRIMARY KEY,
+        numero INTEGER UNIQUE NOT NULL,
+        status TEXT DEFAULT 'livre',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS pedidos (
+        id TEXT PRIMARY KEY,
+        mesa_id INTEGER REFERENCES mesas(id),
+        garcom_id INTEGER REFERENCES usuarios(id),
+        total DECIMAL(10,2) DEFAULT 0,
+        status TEXT DEFAULT 'pendente',
+        observacao TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS pedido_itens (
+        id SERIAL PRIMARY KEY,
+        pedido_id TEXT REFERENCES pedidos(id),
+        item_id INTEGER,
+        nome TEXT NOT NULL,
+        preco DECIMAL(10,2) NOT NULL,
+        quantidade INTEGER DEFAULT 1,
+        observacao TEXT,
+        status TEXT DEFAULT 'pendente'
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS planos (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        preco DECIMAL(10,2) NOT NULL,
+        max_restaurantes INTEGER DEFAULT 1,
+        max_usuarios INTEGER DEFAULT 3,
+        max_mesas INTEGER DEFAULT 10,
+        recursos TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('✅ Tabelas PostgreSQL criadas');
+  } else {
+    // SQLite (código original simplificado)
+    const sqlite3 = require('sqlite3').verbose();
+    const dbLocal = new sqlite3.Database('./database/restaurante.db');
+    
+    dbLocal.serialize(() => {
+      dbLocal.run(`CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        usuario TEXT UNIQUE NOT NULL,
+        senha TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      
+      dbLocal.run(`CREATE TABLE IF NOT EXISTS categorias (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT UNIQUE NOT NULL,
+        icone TEXT DEFAULT '📋',
+        cor TEXT DEFAULT '#4CAF50',
+        ordem INTEGER DEFAULT 0,
+        ativo INTEGER DEFAULT 1
+      )`);
+      
+      dbLocal.run(`CREATE TABLE IF NOT EXISTS cardapio (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        preco REAL NOT NULL,
+        categoria_id INTEGER,
+        descricao TEXT,
+        disponivel INTEGER DEFAULT 1,
+        tempo_preparo INTEGER DEFAULT 15,
+        FOREIGN KEY (categoria_id) REFERENCES categorias (id)
+      )`);
+      
+      dbLocal.run(`CREATE TABLE IF NOT EXISTS mesas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero INTEGER UNIQUE NOT NULL,
+        status TEXT DEFAULT 'livre',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+    });
+    
+    dbLocal.close();
+    console.log('✅ Tabelas SQLite criadas');
+  }
+
+  await inserirDadosIniciais();
+}
+
+async function inserirDadosIniciais() {
+  const salt = bcrypt.genSaltSync(10);
+
+  // Verificar usuários
+  const usuarios = await query("SELECT COUNT(*) as count FROM usuarios");
+  
+  if (usuarios[0].count === '0' || usuarios[0].count === 0) {
+    const senhaAdmin = bcrypt.hashSync('123456', salt);
+    const senhaJoao = bcrypt.hashSync('123456', salt);
+    const senhaMaria = bcrypt.hashSync('123456', salt);
+
+    if (isProduction) {
+      await run(
+        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1, $2, $3, $4)",
+        ['Administrador', 'admin', senhaAdmin, 'admin']
+      );
+      await run(
+        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1, $2, $3, $4)",
+        ['João Garçom', 'joao', senhaJoao, 'garcom']
+      );
+      await run(
+        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1, $2, $3, $4)",
+        ['Maria Cozinha', 'maria', senhaMaria, 'cozinha']
+      );
+    } else {
+      const dbLocal = new (require('sqlite3').verbose()).Database('./database/restaurante.db');
+      dbLocal.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+        ['Administrador', 'admin', senhaAdmin, 'admin']);
+      dbLocal.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+        ['João Garçom', 'joao', senhaJoao, 'garcom']);
+      dbLocal.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
+        ['Maria Cozinha', 'maria', senhaMaria, 'cozinha']);
+      dbLocal.close();
+    }
+    console.log('✅ Usuários padrão criados');
+  }
+
+  // Verificar planos
+  const planos = await query("SELECT COUNT(*) as count FROM planos");
+  
+  if (planos[0].count === '0' || planos[0].count === 0) {
+    if (isProduction) {
+      await run(
+        "INSERT INTO planos (nome, preco, max_restaurantes, max_usuarios, max_mesas) VALUES ($1, $2, $3, $4, $5)",
+        ['Limitado', 97.00, 1, 3, 10]
+      );
+      await run(
+        "INSERT INTO planos (nome, preco, max_restaurantes, max_usuarios, max_mesas) VALUES ($1, $2, $3, $4, $5)",
+        ['Profissional', 197.00, 3, 10, 30]
+      );
+    }
+    console.log('✅ Planos criados');
+  }
+
+  // Verificar categorias
+  const categorias = await query("SELECT COUNT(*) as count FROM categorias");
+  
+  if (categorias[0].count === '0' || categorias[0].count === 0) {
+    const cats = [
+      ['Entradas', '🥗', '#4CAF50', 1],
+      ['Pratos', '🍽️', '#FF5722', 2],
+      ['Bebidas', '🥤', '#2196F3', 3],
+      ['Sobremesas', '🍰', '#9C27B0', 4]
+    ];
+    
+    for (const cat of cats) {
+      if (isProduction) {
+        await run(
+          "INSERT INTO categorias (nome, icone, cor, ordem) VALUES ($1, $2, $3, $4)",
+          cat
+        );
       }
     }
-  });
-
-  // Configurações padrão
-  db.get("SELECT COUNT(*) as count FROM configuracoes", (err, row) => {
-    if (row.count === 0) {
-      const configs = [
-        ['nome_restaurante', 'Meu Restaurante'],
-        ['tempo_medio', '30'],
-        ['cor_primaria', '#4CAF50'],
-        ['cor_secundaria', '#FF9800']
-      ];
-      configs.forEach(cfg => {
-        db.run("INSERT INTO configuracoes (chave, valor) VALUES (?, ?)", cfg);
-      });
-    }
-  });
-
-  console.log('✅ Banco de dados inicializado com sucesso!');
-});
-
-// ========== MIDDLEWARE DE ADMIN ==========
-function verificarAdmin(req, res, next) {
-  if (!req.session.userId) {
-    return res.status(401).json({ erro: 'Não autenticado' });
+    console.log('✅ Categorias criadas');
   }
+
+  // Verificar mesas
+  const mesas = await query("SELECT COUNT(*) as count FROM mesas");
   
-  db.get("SELECT tipo FROM usuarios WHERE id = ?", [req.session.userId], (err, user) => {
-    if (err || !user || user.tipo !== 'admin') {
-      return res.status(403).json({ erro: 'Acesso negado' });
+  if (mesas[0].count === '0' || mesas[0].count === 0) {
+    for (let i = 1; i <= 20; i++) {
+      if (isProduction) {
+        await run(
+          "INSERT INTO mesas (numero, status) VALUES ($1, $2)",
+          [i, 'livre']
+        );
+      }
     }
-    next();
-  });
+    console.log('✅ Mesas criadas');
+  }
 }
 
 // ========== ROTAS DE AUTENTICAÇÃO ==========
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { usuario, senha } = req.body;
   
-  db.get("SELECT * FROM usuarios WHERE usuario = ?", [usuario], (err, user) => {
-    if (err || !user) {
-      return res.status(401).json({ erro: 'Usuário ou senha inválidos' });
-    }
+  try {
+    const users = await query("SELECT * FROM usuarios WHERE usuario = $1", [usuario]);
+    const user = users[0];
     
-    const senhaValida = bcrypt.compareSync(senha, user.senha);
-    
-    if (!senhaValida) {
+    if (!user || !bcrypt.compareSync(senha, user.senha)) {
       return res.status(401).json({ erro: 'Usuário ou senha inválidos' });
     }
     
@@ -218,7 +348,10 @@ app.post('/api/login', (req, res) => {
       usuario: user.usuario,
       tipo: user.tipo
     });
-  });
+  } catch (error) {
+    console.error('Erro no login:', error);
+    res.status(500).json({ erro: 'Erro interno' });
+  }
 });
 
 app.post('/api/logout', (req, res) => {
@@ -226,436 +359,139 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/me', (req, res) => {
+app.get('/api/me', async (req, res) => {
   if (!req.session.userId) {
     return res.status(401).json({ erro: 'Não autenticado' });
   }
   
-  db.get("SELECT id, nome, usuario, tipo FROM usuarios WHERE id = ?", 
-    [req.session.userId], (err, user) => {
-    if (err || !user) {
+  try {
+    const users = await query(
+      "SELECT id, nome, usuario, tipo FROM usuarios WHERE id = $1", 
+      [req.session.userId]
+    );
+    
+    if (!users[0]) {
       return res.status(401).json({ erro: 'Usuário não encontrado' });
     }
-    res.json(user);
-  });
-});
-
-// ========== ROTAS DE MESAS ==========
-app.get('/api/mesas', (req, res) => {
-  db.all("SELECT * FROM mesas ORDER BY numero", [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar mesas:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar mesas' });
-    }
-    res.json(rows);
-  });
-});
-
-app.post('/api/mesas', verificarAdmin, (req, res) => {
-  const { numero } = req.body;
-  
-  if (!numero) {
-    return res.status(400).json({ erro: 'Número da mesa é obrigatório' });
+    
+    res.json(users[0]);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro interno' });
   }
-  
-  db.run("INSERT INTO mesas (numero) VALUES (?)", [numero], function(err) {
-    if (err) {
-      console.error('Erro ao criar mesa:', err);
-      return res.status(500).json({ erro: 'Erro ao criar mesa' });
-    }
-    res.json({ id: this.lastID, numero, status: 'livre' });
-  });
-});
-
-app.put('/api/mesas/:id', verificarAdmin, (req, res) => {
-  const { numero, status } = req.body;
-  
-  db.run("UPDATE mesas SET numero = ?, status = ? WHERE id = ?",
-    [numero, status, req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao atualizar mesa:', err);
-      return res.status(500).json({ erro: 'Erro ao atualizar mesa' });
-    }
-    res.json({ ok: true });
-  });
-});
-
-app.delete('/api/mesas/:id', verificarAdmin, (req, res) => {
-  db.run("DELETE FROM mesas WHERE id = ?", [req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao deletar mesa:', err);
-      return res.status(500).json({ erro: 'Erro ao deletar mesa' });
-    }
-    res.json({ ok: true });
-  });
 });
 
 // ========== ROTAS DE CATEGORIAS ==========
-app.get('/api/categorias', (req, res) => {
-  db.all("SELECT * FROM categorias ORDER BY ordem, nome", [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar categorias:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar categorias' });
-    }
-    res.json(rows);
-  });
+app.get('/api/categorias', async (req, res) => {
+  try {
+    const categorias = await query("SELECT * FROM categorias ORDER BY ordem, nome");
+    res.json(categorias);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar categorias' });
+  }
 });
 
-app.post('/api/categorias', verificarAdmin, (req, res) => {
+app.post('/api/categorias', async (req, res) => {
   const { nome, icone, cor, ordem } = req.body;
   
   if (!nome) {
     return res.status(400).json({ erro: 'Nome é obrigatório' });
   }
   
-  db.run(
-    "INSERT INTO categorias (nome, icone, cor, ordem) VALUES (?, ?, ?, ?)",
-    [nome, icone || '📋', cor || '#4CAF50', ordem || 0],
-    function(err) {
-      if (err) {
-        console.error('Erro ao criar categoria:', err);
-        return res.status(500).json({ erro: 'Erro ao criar categoria' });
-      }
-      res.json({ id: this.lastID, nome, icone, cor, ordem });
-    }
-  );
-});
-
-app.put('/api/categorias/:id', verificarAdmin, (req, res) => {
-  const { nome, icone, cor, ordem, ativo } = req.body;
-  
-  db.run(
-    "UPDATE categorias SET nome = ?, icone = ?, cor = ?, ordem = ?, ativo = ? WHERE id = ?",
-    [nome, icone, cor, ordem, ativo, req.params.id],
-    function(err) {
-      if (err) {
-        console.error('Erro ao atualizar categoria:', err);
-        return res.status(500).json({ erro: 'Erro ao atualizar categoria' });
-      }
-      res.json({ ok: true });
-    }
-  );
-});
-
-app.delete('/api/categorias/:id', verificarAdmin, (req, res) => {
-  db.run("DELETE FROM categorias WHERE id = ?", [req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao deletar categoria:', err);
-      return res.status(500).json({ erro: 'Erro ao deletar categoria' });
-    }
-    res.json({ ok: true });
-  });
+  try {
+    const result = await run(
+      "INSERT INTO categorias (nome, icone, cor, ordem) VALUES ($1, $2, $3, $4) RETURNING id",
+      [nome, icone || '📋', cor || '#4CAF50', ordem || 0]
+    );
+    
+    res.json({ id: result.lastID, nome, icone, cor, ordem });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao criar categoria' });
+  }
 });
 
 // ========== ROTAS DO CARDÁPIO ==========
-app.get('/api/cardapio', (req, res) => {
-  db.all(`
-    SELECT c.*, cat.nome as categoria_nome, cat.cor as categoria_cor, cat.icone as categoria_icone
-    FROM cardapio c
-    LEFT JOIN categorias cat ON c.categoria_id = cat.id
-    ORDER BY cat.ordem, c.nome
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar cardápio:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar cardápio' });
-    }
-    res.json(rows);
-  });
-});
-
-app.post('/api/cardapio', verificarAdmin, (req, res) => {
-  const { nome, preco, categoria_id, descricao, tempo_preparo } = req.body;
-  
-  if (!nome || !preco || !categoria_id) {
-    return res.status(400).json({ erro: 'Nome, preço e categoria são obrigatórios' });
+app.get('/api/cardapio', async (req, res) => {
+  try {
+    const itens = await query(`
+      SELECT c.*, cat.nome as categoria_nome, cat.cor as categoria_cor, cat.icone as categoria_icone
+      FROM cardapio c
+      LEFT JOIN categorias cat ON c.categoria_id = cat.id
+      ORDER BY cat.ordem, c.nome
+    `);
+    res.json(itens);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar cardápio' });
   }
-  
-  db.run(
-    "INSERT INTO cardapio (nome, preco, categoria_id, descricao, tempo_preparo) VALUES (?, ?, ?, ?, ?)",
-    [nome, preco, categoria_id, descricao || '', tempo_preparo || 15],
-    function(err) {
-      if (err) {
-        console.error('Erro ao criar item:', err);
-        return res.status(500).json({ erro: 'Erro ao criar item' });
-      }
-      res.json({ id: this.lastID, ...req.body });
-    }
-  );
 });
 
-app.put('/api/cardapio/:id', verificarAdmin, (req, res) => {
-  const { nome, preco, categoria_id, descricao, disponivel, tempo_preparo } = req.body;
-  
-  db.run(
-    "UPDATE cardapio SET nome = ?, preco = ?, categoria_id = ?, descricao = ?, disponivel = ?, tempo_preparo = ? WHERE id = ?",
-    [nome, preco, categoria_id, descricao, disponivel, tempo_preparo, req.params.id],
-    function(err) {
-      if (err) {
-        console.error('Erro ao atualizar item:', err);
-        return res.status(500).json({ erro: 'Erro ao atualizar item' });
-      }
-      res.json({ ok: true });
-    }
-  );
-});
-
-app.delete('/api/cardapio/:id', verificarAdmin, (req, res) => {
-  db.run("DELETE FROM cardapio WHERE id = ?", [req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao deletar item:', err);
-      return res.status(500).json({ erro: 'Erro ao deletar item' });
-    }
-    res.json({ ok: true });
-  });
+// ========== ROTAS DE MESAS ==========
+app.get('/api/mesas', async (req, res) => {
+  try {
+    const mesas = await query("SELECT * FROM mesas ORDER BY numero");
+    res.json(mesas);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar mesas' });
+  }
 });
 
 // ========== ROTAS DE USUÁRIOS ==========
-app.get('/api/usuarios', verificarAdmin, (req, res) => {
-  db.all("SELECT id, nome, usuario, tipo, created_at FROM usuarios ORDER BY id", [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar usuários:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar usuários' });
-    }
-    res.json(rows);
-  });
+app.get('/api/usuarios', async (req, res) => {
+  try {
+    const usuarios = await query(
+      "SELECT id, nome, usuario, tipo, created_at FROM usuarios ORDER BY id"
+    );
+    res.json(usuarios);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar usuários' });
+  }
 });
 
-app.post('/api/usuarios', verificarAdmin, (req, res) => {
+app.post('/api/usuarios', async (req, res) => {
   const { nome, usuario, senha, tipo } = req.body;
   
   if (!nome || !usuario || !senha || !tipo) {
     return res.status(400).json({ erro: 'Todos os campos são obrigatórios' });
   }
   
-  const senhaHash = bcrypt.hashSync(senha, 10);
-  
-  db.run(
-    "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-    [nome, usuario, senhaHash, tipo],
-    function(err) {
-      if (err) {
-        console.error('Erro ao criar usuário:', err);
-        return res.status(500).json({ erro: 'Erro ao criar usuário' });
-      }
-      res.json({ id: this.lastID, nome, usuario, tipo });
-    }
-  );
-});
-
-app.put('/api/usuarios/:id', verificarAdmin, (req, res) => {
-  const { nome, usuario, senha, tipo } = req.body;
-  const id = req.params.id;
-  
-  let query, params;
-  
-  if (senha) {
+  try {
     const senhaHash = bcrypt.hashSync(senha, 10);
-    query = "UPDATE usuarios SET nome = ?, usuario = ?, senha = ?, tipo = ? WHERE id = ?";
-    params = [nome, usuario, senhaHash, tipo, id];
-  } else {
-    query = "UPDATE usuarios SET nome = ?, usuario = ?, tipo = ? WHERE id = ?";
-    params = [nome, usuario, tipo, id];
+    const result = await run(
+      "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1, $2, $3, $4) RETURNING id",
+      [nome, usuario, senhaHash, tipo]
+    );
+    
+    res.json({ id: result.lastID, nome, usuario, tipo });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao criar usuário' });
   }
-  
-  db.run(query, params, function(err) {
-    if (err) {
-      console.error('Erro ao atualizar usuário:', err);
-      return res.status(500).json({ erro: 'Erro ao atualizar usuário' });
-    }
-    res.json({ ok: true });
-  });
 });
 
-app.delete('/api/usuarios/:id', verificarAdmin, (req, res) => {
-  if (req.params.id === '1') {
-    return res.status(400).json({ erro: 'Não é possível excluir o administrador principal' });
+// ========== ROTAS DE PLANOS ==========
+app.get('/api/planos', async (req, res) => {
+  try {
+    const planos = await query("SELECT * FROM planos ORDER BY preco");
+    res.json(planos);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar planos' });
   }
-  
-  db.run("DELETE FROM usuarios WHERE id = ?", [req.params.id], function(err) {
-    if (err) {
-      console.error('Erro ao deletar usuário:', err);
-      return res.status(500).json({ erro: 'Erro ao deletar usuário' });
-    }
-    res.json({ ok: true });
-  });
-});
-
-// ========== ROTAS DE PEDIDOS ==========
-app.post('/api/pedidos', (req, res) => {
-  if (!req.session.userId) {
-    return res.status(401).json({ erro: 'Não autenticado' });
-  }
-  
-  const pedido = req.body;
-  const pedidoId = Date.now().toString();
-  
-  db.run(
-    "INSERT INTO pedidos (id, mesa_id, garcom_id, total, observacao) VALUES (?, ?, ?, ?, ?)",
-    [pedidoId, pedido.mesa, req.session.userId, pedido.total, pedido.observacao || ''],
-    function(err) {
-      if (err) {
-        console.error('Erro ao criar pedido:', err);
-        return res.status(500).json({ erro: 'Erro ao criar pedido' });
-      }
-      
-      const stmt = db.prepare(
-        "INSERT INTO pedido_itens (pedido_id, item_id, nome, preco, quantidade, observacao) VALUES (?, ?, ?, ?, ?, ?)"
-      );
-      
-      pedido.itens.forEach(item => {
-        stmt.run([pedidoId, item.id, item.nome, item.preco, item.quantidade, item.observacao || '']);
-      });
-      
-      stmt.finalize();
-      
-      db.run("UPDATE mesas SET status = 'ocupada' WHERE id = ?", [pedido.mesa]);
-      
-      io.emit('novo-pedido', { ...pedido, id: pedidoId, created_at: new Date() });
-      
-      res.json({ id: pedidoId, ok: true });
-    }
-  );
-});
-
-app.get('/api/pedidos/pendentes', (req, res) => {
-  db.all(`
-    SELECT p.*, m.numero as mesa_numero, u.nome as garcom_nome
-    FROM pedidos p
-    JOIN mesas m ON p.mesa_id = m.id
-    LEFT JOIN usuarios u ON p.garcom_id = u.id
-    WHERE p.status IN ('pendente', 'preparando')
-    ORDER BY p.created_at DESC
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar pedidos:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar pedidos' });
-    }
-    res.json(rows);
-  });
-});
-
-app.get('/api/pedidos/prontos', (req, res) => {
-  db.all(`
-    SELECT p.*, m.numero as mesa_numero
-    FROM pedidos p
-    JOIN mesas m ON p.mesa_id = m.id
-    WHERE p.status = 'pronto'
-    ORDER BY p.created_at DESC
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar pedidos prontos:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar pedidos' });
-    }
-    res.json(rows);
-  });
-});
-
-app.post('/api/pedidos/:id/entregar', (req, res) => {
-  const pedidoId = req.params.id;
-  
-  db.run("UPDATE pedidos SET status = 'entregue', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [pedidoId], function(err) {
-    if (err) {
-      console.error('Erro ao entregar pedido:', err);
-      return res.status(500).json({ erro: 'Erro ao entregar pedido' });
-    }
-    
-    db.get("SELECT mesa_id FROM pedidos WHERE id = ?", [pedidoId], (err, row) => {
-      if (row) {
-        db.run("UPDATE mesas SET status = 'livre' WHERE id = ?", [row.mesa_id]);
-      }
-    });
-    
-    io.emit('pedido-entregue', pedidoId);
-    res.json({ ok: true });
-  });
-});
-
-// ========== ROTAS DE ESTATÍSTICAS ==========
-app.get('/api/stats', verificarAdmin, (req, res) => {
-  db.all(`
-    SELECT 
-      COUNT(*) as total_pedidos,
-      SUM(total) as faturamento,
-      COUNT(DISTINCT mesa_id) as clientes
-    FROM pedidos 
-    WHERE date(created_at) = date('now')
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar stats:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar estatísticas' });
-    }
-    
-    res.json({
-      faturamento: rows[0]?.faturamento || 0,
-      pedidos: rows[0]?.total_pedidos || 0,
-      clientes: rows[0]?.clientes || 0,
-      tempoMedio: 30
-    });
-  });
-});
-
-// ========== ROTAS DE CONFIGURAÇÕES ==========
-app.get('/api/config', (req, res) => {
-  db.all("SELECT chave, valor FROM configuracoes", [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar config:', err);
-      return res.status(500).json({ erro: 'Erro ao buscar configurações' });
-    }
-    
-    const config = {};
-    rows.forEach(row => {
-      config[row.chave] = row.valor;
-    });
-    
-    res.json(config);
-  });
-});
-
-app.post('/api/config', verificarAdmin, (req, res) => {
-  const configs = req.body;
-  
-  const stmt = db.prepare("INSERT OR REPLACE INTO configuracoes (chave, valor) VALUES (?, ?)");
-  
-  Object.entries(configs).forEach(([chave, valor]) => {
-    stmt.run([chave, valor.toString()]);
-  });
-  
-  stmt.finalize();
-  res.json({ ok: true });
-});
-
-// ========== ROTA DE TESTE ==========
-app.get('/api/testar', (req, res) => {
-  db.all("SELECT id, nome, usuario, tipo FROM usuarios", [], (err, users) => {
-    res.json({
-      usuarios: users,
-      mensagem: 'Sistema funcionando!'
-    });
-  });
 });
 
 // ========== SOCKET.IO ==========
 io.on('connection', (socket) => {
   console.log('🔌 Cliente conectado:', socket.id);
 
-  socket.on('solicitar-pedidos', () => {
-    db.all("SELECT * FROM pedidos WHERE status IN ('pendente', 'preparando', 'pronto') ORDER BY created_at DESC", 
-    [], (err, rows) => {
-      if (!err) {
-        socket.emit('pedidos-ativos', rows);
-      }
-    });
+  socket.on('novo-pedido', (pedido) => {
+    console.log('📦 Novo pedido:', pedido);
+    io.emit('pedido-para-cozinha', pedido);
   });
 
   socket.on('iniciar-preparo', (pedidoId) => {
     console.log('🔨 Iniciar preparo:', pedidoId);
-    db.run("UPDATE pedidos SET status = 'preparando', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [pedidoId]);
     io.emit('pedido-em-preparo', pedidoId);
   });
 
   socket.on('pedido-pronto', (pedidoId) => {
     console.log('✅ Pedido pronto:', pedidoId);
-    db.run("UPDATE pedidos SET status = 'pronto', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [pedidoId]);
     io.emit('pedido-para-entrega', pedidoId);
   });
 });
@@ -682,11 +518,17 @@ app.get('/admin', (req, res) => {
 
 // ========== INICIAR SERVIDOR ==========
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`\n🚀 SERVIDOR RODANDO NA PORTA ${PORT}`);
-  console.log(`📱 Acesse: https://restaurante-sistema-0kyy.onrender.com`);
-  console.log(`\n🔐 LOGINS:`);
-  console.log(`   Admin:  admin / 123456`);
-  console.log(`   Garçom: joao / 123456`);
-  console.log(`   Cozinha: maria / 123456\n`);
+
+criarTabelas().then(() => {
+  server.listen(PORT, () => {
+    console.log(`\n🚀 SERVIDOR RODANDO NA PORTA ${PORT}`);
+    console.log(`📱 Local: http://localhost:${PORT}`);
+    if (isProduction) {
+      console.log(`🌐 Render: https://restaurante-sistema.onrender.com`);
+    }
+    console.log(`\n🔐 LOGINS:`);
+    console.log(`   Admin: admin / 123456`);
+    console.log(`   Garçom: joao / 123456`);
+    console.log(`   Cozinha: maria / 123456\n`);
+  });
 });
