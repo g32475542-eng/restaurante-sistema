@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Sistema Restaurante</title>
+    <title>DigiMenu - Login</title>
     <style>
         * {
             margin: 0;
@@ -83,10 +83,6 @@
             outline: none;
             background: white;
             box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-        }
-        
-        .form-group input::placeholder {
-            color: #aaa;
         }
         
         .btn-login {
@@ -195,7 +191,7 @@
 <body>
     <div class="login-container">
         <div class="login-header">
-            <h1>🍽️ Restaurante</h1>
+            <h1>🍽️ DigiMenu</h1>
             <p>Faça login para acessar o sistema</p>
         </div>
         
@@ -228,7 +224,7 @@
         </div>
         
         <div class="login-footer">
-            <p>Sistema de Gestão de Restaurante v2.0</p>
+            <p>DigiMenu - Sistema de Gestão de Restaurantes</p>
         </div>
     </div>
 
@@ -245,13 +241,11 @@
             const usuario = document.getElementById('usuario').value;
             const senha = document.getElementById('senha').value;
 
-            // Validação básica
             if (!usuario || !senha) {
                 mostrarErro('Preencha todos os campos!');
                 return;
             }
 
-            // Mostrar loading
             btn.disabled = true;
             spinner.style.display = 'inline-block';
             btnText.textContent = 'Entrando...';
@@ -270,8 +264,7 @@
                     throw new Error(data.erro || 'Erro ao fazer login');
                 }
 
-                // Redirecionar baseado no tipo de usuário
-                console.log('Login bem sucedido:', data);
+                console.log('✅ Login bem sucedido:', data);
                 
                 switch(data.tipo) {
                     case 'admin':
@@ -288,10 +281,9 @@
                 }
                 
             } catch (error) {
-                console.error('Erro no login:', error);
+                console.error('❌ Erro no login:', error);
                 mostrarErro(error.message);
                 
-                // Resetar botão
                 btn.disabled = false;
                 spinner.style.display = 'none';
                 btnText.textContent = 'Entrar';
@@ -302,13 +294,11 @@
             errorDiv.textContent = mensagem;
             errorDiv.style.display = 'block';
             
-            // Esconder erro depois de 3 segundos
             setTimeout(() => {
                 errorDiv.style.display = 'none';
             }, 3000);
         }
 
-        // Enter no campo senha
         document.getElementById('senha').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 form.dispatchEvent(new Event('submit'));
