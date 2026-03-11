@@ -409,6 +409,32 @@ app.post('/api/categorias', async (req, res) => {
   }
 });
 
+app.put('/api/categorias/:id', async (req, res) => {
+  const { nome, icone, cor, ordem, ativo } = req.body;
+  const { id } = req.params;
+  
+  try {
+    await run(
+      "UPDATE categorias SET nome = $1, icone = $2, cor = $3, ordem = $4, ativo = $5 WHERE id = $6",
+      [nome, icone, cor, ordem, ativo, id]
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao atualizar categoria' });
+  }
+});
+
+app.delete('/api/categorias/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    await run("DELETE FROM categorias WHERE id = $1", [id]);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao deletar categoria' });
+  }
+});
+
 // ========== ROTAS DO CARDÁPIO ==========
 app.get('/api/cardapio', async (req, res) => {
   try {
@@ -424,6 +450,50 @@ app.get('/api/cardapio', async (req, res) => {
   }
 });
 
+app.post('/api/cardapio', async (req, res) => {
+  const { nome, preco, categoria_id, descricao, tempo_preparo } = req.body;
+  
+  if (!nome || !preco || !categoria_id) {
+    return res.status(400).json({ erro: 'Nome, preço e categoria são obrigatórios' });
+  }
+  
+  try {
+    const result = await run(
+      "INSERT INTO cardapio (nome, preco, categoria_id, descricao, tempo_preparo) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [nome, preco, categoria_id, descricao || '', tempo_preparo || 15]
+    );
+    res.json({ id: result.lastID, nome, preco, categoria_id, descricao, tempo_preparo });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao criar item' });
+  }
+});
+
+app.put('/api/cardapio/:id', async (req, res) => {
+  const { nome, preco, categoria_id, descricao, disponivel, tempo_preparo } = req.body;
+  const { id } = req.params;
+  
+  try {
+    await run(
+      "UPDATE cardapio SET nome = $1, preco = $2, categoria_id = $3, descricao = $4, disponivel = $5, tempo_preparo = $6 WHERE id = $7",
+      [nome, preco, categoria_id, descricao, disponivel, tempo_preparo, id]
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao atualizar item' });
+  }
+});
+
+app.delete('/api/cardapio/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    await run("DELETE FROM cardapio WHERE id = $1", [id]);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao deletar item' });
+  }
+});
+
 // ========== ROTAS DE MESAS ==========
 app.get('/api/mesas', async (req, res) => {
   try {
@@ -431,6 +501,50 @@ app.get('/api/mesas', async (req, res) => {
     res.json(mesas);
   } catch (error) {
     res.status(500).json({ erro: 'Erro ao buscar mesas' });
+  }
+});
+
+app.post('/api/mesas', async (req, res) => {
+  const { numero } = req.body;
+  
+  if (!numero) {
+    return res.status(400).json({ erro: 'Número da mesa é obrigatório' });
+  }
+  
+  try {
+    const result = await run(
+      "INSERT INTO mesas (numero) VALUES ($1) RETURNING id",
+      [numero]
+    );
+    res.json({ id: result.lastID, numero, status: 'livre' });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao criar mesa' });
+  }
+});
+
+app.put('/api/mesas/:id', async (req, res) => {
+  const { numero, status } = req.body;
+  const { id } = req.params;
+  
+  try {
+    await run(
+      "UPDATE mesas SET numero = $1, status = $2 WHERE id = $3",
+      [numero, status, id]
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao atualizar mesa' });
+  }
+});
+
+app.delete('/api/mesas/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    await run("DELETE FROM mesas WHERE id = $1", [id]);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao deletar mesa' });
   }
 });
 
@@ -466,6 +580,44 @@ app.post('/api/usuarios', async (req, res) => {
   }
 });
 
+app.put('/api/usuarios/:id', async (req, res) => {
+  const { nome, usuario, senha, tipo } = req.body;
+  const { id } = req.params;
+  
+  try {
+    if (senha) {
+      const senhaHash = bcrypt.hashSync(senha, 10);
+      await run(
+        "UPDATE usuarios SET nome = $1, usuario = $2, senha = $3, tipo = $4 WHERE id = $5",
+        [nome, usuario, senhaHash, tipo, id]
+      );
+    } else {
+      await run(
+        "UPDATE usuarios SET nome = $1, usuario = $2, tipo = $3 WHERE id = $4",
+        [nome, usuario, tipo, id]
+      );
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao atualizar usuário' });
+  }
+});
+
+app.delete('/api/usuarios/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  if (id === '1') {
+    return res.status(400).json({ erro: 'Não é possível excluir o administrador principal' });
+  }
+  
+  try {
+    await run("DELETE FROM usuarios WHERE id = $1", [id]);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao deletar usuário' });
+  }
+});
+
 // ========== ROTAS DE PLANOS ==========
 app.get('/api/planos', async (req, res) => {
   try {
@@ -476,23 +628,161 @@ app.get('/api/planos', async (req, res) => {
   }
 });
 
+// ========== ROTAS DE PEDIDOS ==========
+app.post('/api/pedidos', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ erro: 'Não autenticado' });
+  }
+  
+  const pedido = req.body;
+  const pedidoId = Date.now().toString();
+  
+  try {
+    await run(
+      "INSERT INTO pedidos (id, mesa_id, garcom_id, total, observacao) VALUES ($1, $2, $3, $4, $5)",
+      [pedidoId, pedido.mesa, req.session.userId, pedido.total, pedido.observacao || '']
+    );
+    
+    for (const item of pedido.itens) {
+      await run(
+        "INSERT INTO pedido_itens (pedido_id, item_id, nome, preco, quantidade, observacao) VALUES ($1, $2, $3, $4, $5, $6)",
+        [pedidoId, item.id, item.nome, item.preco, item.quantidade, item.observacao || '']
+      );
+    }
+    
+    await run("UPDATE mesas SET status = 'ocupada' WHERE id = $1", [pedido.mesa]);
+    
+    io.emit('novo-pedido', { ...pedido, id: pedidoId, created_at: new Date() });
+    
+    res.json({ id: pedidoId, ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao criar pedido' });
+  }
+});
+
+app.get('/api/pedidos/pendentes', async (req, res) => {
+  try {
+    const pedidos = await query(`
+      SELECT p.*, m.numero as mesa_numero, u.nome as garcom_nome
+      FROM pedidos p
+      JOIN mesas m ON p.mesa_id = m.id
+      LEFT JOIN usuarios u ON p.garcom_id = u.id
+      WHERE p.status IN ('pendente', 'preparando')
+      ORDER BY p.created_at DESC
+    `);
+    res.json(pedidos);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar pedidos' });
+  }
+});
+
+app.get('/api/pedidos/prontos', async (req, res) => {
+  try {
+    const pedidos = await query(`
+      SELECT p.*, m.numero as mesa_numero
+      FROM pedidos p
+      JOIN mesas m ON p.mesa_id = m.id
+      WHERE p.status = 'pronto'
+      ORDER BY p.created_at DESC
+    `);
+    res.json(pedidos);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar pedidos' });
+  }
+});
+
+app.post('/api/pedidos/:id/entregar', async (req, res) => {
+  const pedidoId = req.params.id;
+  
+  try {
+    await run("UPDATE pedidos SET status = 'entregue', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [pedidoId]);
+    
+    const result = await query("SELECT mesa_id FROM pedidos WHERE id = $1", [pedidoId]);
+    if (result[0]) {
+      await run("UPDATE mesas SET status = 'livre' WHERE id = $1", [result[0].mesa_id]);
+    }
+    
+    io.emit('pedido-entregue', pedidoId);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao entregar pedido' });
+  }
+});
+
+// ========== ROTAS DE ESTATÍSTICAS ==========
+app.get('/api/stats', async (req, res) => {
+  try {
+    const stats = await query(`
+      SELECT 
+        COUNT(*) as total_pedidos,
+        COALESCE(SUM(total), 0) as faturamento,
+        COUNT(DISTINCT mesa_id) as clientes
+      FROM pedidos 
+      WHERE DATE(created_at) = CURRENT_DATE
+    `);
+    
+    res.json({
+      faturamento: stats[0]?.faturamento || 0,
+      pedidos: stats[0]?.total_pedidos || 0,
+      clientes: stats[0]?.clientes || 0,
+      tempoMedio: 30
+    });
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar estatísticas' });
+  }
+});
+
+// ========== ROTAS DE CONFIGURAÇÕES ==========
+app.get('/api/config', async (req, res) => {
+  try {
+    const configs = await query("SELECT chave, valor FROM configuracoes");
+    
+    const config = {};
+    configs.forEach(row => {
+      config[row.chave] = row.valor;
+    });
+    
+    res.json(config);
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao buscar configurações' });
+  }
+});
+
 // ========== SOCKET.IO ==========
 io.on('connection', (socket) => {
   console.log('🔌 Cliente conectado:', socket.id);
 
-  socket.on('novo-pedido', (pedido) => {
-    console.log('📦 Novo pedido:', pedido);
-    io.emit('pedido-para-cozinha', pedido);
+  socket.on('solicitar-pedidos', async () => {
+    try {
+      const pedidos = await query(`
+        SELECT * FROM pedidos 
+        WHERE status IN ('pendente', 'preparando', 'pronto') 
+        ORDER BY created_at DESC
+      `);
+      socket.emit('pedidos-ativos', pedidos);
+    } catch (error) {
+      console.error('Erro ao buscar pedidos:', error);
+    }
   });
 
-  socket.on('iniciar-preparo', (pedidoId) => {
+  socket.on('iniciar-preparo', async (pedidoId) => {
     console.log('🔨 Iniciar preparo:', pedidoId);
-    io.emit('pedido-em-preparo', pedidoId);
+    try {
+      await run("UPDATE pedidos SET status = 'preparando', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [pedidoId]);
+      io.emit('pedido-em-preparo', pedidoId);
+    } catch (error) {
+      console.error('Erro ao iniciar preparo:', error);
+    }
   });
 
-  socket.on('pedido-pronto', (pedidoId) => {
+  socket.on('pedido-pronto', async (pedidoId) => {
     console.log('✅ Pedido pronto:', pedidoId);
-    io.emit('pedido-para-entrega', pedidoId);
+    try {
+      await run("UPDATE pedidos SET status = 'pronto', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [pedidoId]);
+      io.emit('pedido-para-entrega', pedidoId);
+    } catch (error) {
+      console.error('Erro ao finalizar preparo:', error);
+    }
   });
 });
 
@@ -501,19 +791,25 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/src/pages/login.html'));
 });
 
+app.get('/admin', (req, res) => {
+  if (!req.session.userId) {
+    return res.redirect('/');
+  }
+  res.sendFile(path.join(__dirname, '../frontend/src/pages/admin/painel-admin.html'));
+});
+
 app.get('/garcom', (req, res) => {
-  if (!req.session.userId) return res.redirect('/');
+  if (!req.session.userId) {
+    return res.redirect('/');
+  }
   res.sendFile(path.join(__dirname, '../frontend/src/pages/garcom/dashboard-garcom.html'));
 });
 
 app.get('/cozinha', (req, res) => {
-  if (!req.session.userId) return res.redirect('/');
+  if (!req.session.userId) {
+    return res.redirect('/');
+  }
   res.sendFile(path.join(__dirname, '../frontend/src/pages/cozinha/tela-cozinha.html'));
-});
-
-app.get('/admin', (req, res) => {
-  if (!req.session.userId) return res.redirect('/');
-  res.sendFile(path.join(__dirname, '../frontend/src/pages/admin/painel-admin.html'));
 });
 
 // ========== INICIAR SERVIDOR ==========
@@ -524,7 +820,7 @@ criarTabelas().then(() => {
     console.log(`\n🚀 SERVIDOR RODANDO NA PORTA ${PORT}`);
     console.log(`📱 Local: http://localhost:${PORT}`);
     if (isProduction) {
-      console.log(`🌐 Render: https://restaurante-sistema.onrender.com`);
+      console.log(`🌐 Render: https://restaurante-sistema-4fy0.onrender.com`);
     }
     console.log(`\n🔐 LOGINS:`);
     console.log(`   Admin: admin / 123456`);
