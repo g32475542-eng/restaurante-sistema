@@ -229,81 +229,85 @@
     </div>
 
     <script>
-        const form = document.getElementById('loginForm');
-        const errorDiv = document.getElementById('loginError');
-        const btn = document.getElementById('btnLogin');
-        const spinner = document.getElementById('loadingSpinner');
-        const btnText = document.getElementById('btnText');
+    const form = document.getElementById('loginForm');
+    const errorDiv = document.getElementById('loginError');
+    const btn = document.getElementById('btnLogin');
+    const spinner = document.getElementById('loadingSpinner');
+    const btnText = document.getElementById('btnText');
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const usuario = document.getElementById('usuario').value;
-            const senha = document.getElementById('senha').value;
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault(); // IMPEDE O RECARREGAMENTO DA PÁGINA
+        
+        const usuario = document.getElementById('usuario').value;
+        const senha = document.getElementById('senha').value;
 
-            if (!usuario || !senha) {
-                mostrarErro('Preencha todos os campos!');
-                return;
-            }
-
-            btn.disabled = true;
-            spinner.style.display = 'inline-block';
-            btnText.textContent = 'Entrando...';
-            errorDiv.style.display = 'none';
-
-            try {
-                const response = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usuario, senha })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.erro || 'Erro ao fazer login');
-                }
-
-                console.log('✅ Login bem sucedido:', data);
-                
-                switch(data.tipo) {
-                    case 'admin':
-                        window.location.href = '/admin';
-                        break;
-                    case 'garcom':
-                        window.location.href = '/garcom';
-                        break;
-                    case 'cozinha':
-                        window.location.href = '/cozinha';
-                        break;
-                    default:
-                        window.location.href = '/';
-                }
-                
-            } catch (error) {
-                console.error('❌ Erro no login:', error);
-                mostrarErro(error.message);
-                
-                btn.disabled = false;
-                spinner.style.display = 'none';
-                btnText.textContent = 'Entrar';
-            }
-        });
-
-        function mostrarErro(mensagem) {
-            errorDiv.textContent = mensagem;
-            errorDiv.style.display = 'block';
-            
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 3000);
+        if (!usuario || !senha) {
+            mostrarErro('Preencha todos os campos!');
+            return;
         }
 
-        document.getElementById('senha').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                form.dispatchEvent(new Event('submit'));
+        // Mostrar loading
+        btn.disabled = true;
+        spinner.style.display = 'inline-block';
+        btnText.textContent = 'Entrando...';
+        errorDiv.style.display = 'none';
+
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ usuario, senha })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.erro || 'Erro ao fazer login');
             }
-        });
-    </script>
+
+            console.log('✅ Login bem sucedido:', data);
+            
+            // REDIRECIONAMENTO MANUAL
+            switch(data.tipo) {
+                case 'admin':
+                    window.location.href = '/admin';
+                    break;
+                case 'garcom':
+                    window.location.href = '/garcom';
+                    break;
+                case 'cozinha':
+                    window.location.href = '/cozinha';
+                    break;
+                default:
+                    window.location.href = '/';
+            }
+            
+        } catch (error) {
+            console.error('❌ Erro no login:', error);
+            mostrarErro(error.message);
+            
+            // Resetar botão
+            btn.disabled = false;
+            spinner.style.display = 'none';
+            btnText.textContent = 'Entrar';
+        }
+    });
+
+    function mostrarErro(mensagem) {
+        errorDiv.textContent = mensagem;
+        errorDiv.style.display = 'block';
+        
+        setTimeout(() => {
+            errorDiv.style.display = 'none';
+        }, 3000);
+    }
+
+    // Enter no campo senha
+    document.getElementById('senha').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            form.dispatchEvent(new Event('submit'));
+        }
+    });
+</script>
 </body>
 </html>
