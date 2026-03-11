@@ -462,7 +462,6 @@
             <div class="tab-pane ativo" id="tab-dashboard">
                 <h2>📊 Dashboard</h2>
                 <p>Visão geral do restaurante</p>
-                <!-- Gráficos virão aqui -->
             </div>
             
             <!-- ===== CATEGORIAS ===== -->
@@ -473,21 +472,21 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Nome da Categoria</label>
-                                <input type="text" id="cat-nome" class="form-control" required>
+                                <input type="text" id="cat-nome" name="nome" class="form-control" required>
                             </div>
                             <div class="form-group">
                                 <label>Ícone</label>
-                                <input type="text" id="cat-icone" class="form-control" value="📋" placeholder="📋">
+                                <input type="text" id="cat-icone" name="icone" class="form-control" value="📋" placeholder="📋">
                             </div>
                         </div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Cor</label>
-                                <input type="color" id="cat-cor" class="form-control" value="#4CAF50">
+                                <input type="color" id="cat-cor" name="cor" class="form-control" value="#4CAF50">
                             </div>
                             <div class="form-group">
                                 <label>Ordem</label>
-                                <input type="number" id="cat-ordem" class="form-control" value="0">
+                                <input type="number" id="cat-ordem" name="ordem" class="form-control" value="0">
                             </div>
                         </div>
                         <div class="form-actions">
@@ -515,9 +514,7 @@
                                     <th>Ações</th>
                                 </tr>
                             </thead>
-                            <tbody id="categorias-table-body">
-                                <!-- Categorias serão carregadas aqui -->
-                            </tbody>
+                            <tbody id="categorias-table-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -528,32 +525,32 @@
                 <div class="form-panel">
                     <h3>➕ Novo Item</h3>
                     <form id="form-item">
-                        <input type="hidden" id="item-id">
+                        <input type="hidden" id="item-id" name="id">
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Nome do Item</label>
-                                <input type="text" id="nome" class="form-control" required>
+                                <input type="text" id="item-nome" name="nome" class="form-control" required>
                             </div>
                             <div class="form-group">
                                 <label>Preço (R$)</label>
-                                <input type="number" id="item-preco" class="form-control" step="0.01" required>
+                                <input type="number" id="item-preco" name="preco" class="form-control" step="0.01" required>
                             </div>
                         </div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Categoria</label>
-                                <select id="item-categoria" class="form-control" required>
+                                <select id="item-categoria" name="categoria_id" class="form-control" required>
                                     <option value="">Selecione...</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label>Tempo de Preparo (min)</label>
-                                <input type="number" id="item-tempo" class="form-control" value="15">
+                                <input type="number" id="item-tempo" name="tempo_preparo" class="form-control" value="15">
                             </div>
                         </div>
                         <div class="form-group">
                             <label>Descrição</label>
-                            <textarea id="item-descricao" class="form-control" rows="3"></textarea>
+                            <textarea id="item-descricao" name="descricao" class="form-control" rows="3"></textarea>
                         </div>
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary">Salvar Item</button>
@@ -580,9 +577,7 @@
                                     <th>Ações</th>
                                 </tr>
                             </thead>
-                            <tbody id="cardapio-table-body">
-                                <!-- Itens serão carregados aqui -->
-                            </tbody>
+                            <tbody id="cardapio-table-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -596,7 +591,7 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Número da Mesa</label>
-                                <input type="number" id="mesa-numero" class="form-control" required>
+                                <input type="number" id="mesa-numero" name="numero" class="form-control" required>
                             </div>
                         </div>
                         <div class="form-actions">
@@ -605,9 +600,7 @@
                     </form>
                 </div>
                 
-                <div class="categorias-grid" id="mesas-grid">
-                    <!-- Mesas serão carregadas aqui -->
-                </div>
+                <div class="categorias-grid" id="mesas-grid"></div>
             </div>
             
             <!-- ===== USUÁRIOS ===== -->
@@ -615,26 +608,26 @@
                 <div class="form-panel">
                     <h3>➕ Novo Usuário</h3>
                     <form id="form-usuario">
-                        <input type="hidden" id="usuario-id">
+                        <input type="hidden" id="usuario-id" name="id">
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Nome</label>
-                                <input type="text" id="usuario-nome" class="form-control" required>
+                                <input type="text" id="usuario-nome" name="nome" class="form-control" required>
                             </div>
                             <div class="form-group">
                                 <label>Usuário</label>
-                                <input type="text" id="usuario-login" class="form-control" required>
+                                <input type="text" id="usuario-login" name="usuario" class="form-control" required>
                             </div>
                         </div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Senha</label>
-                                <input type="password" id="usuario-senha" class="form-control">
+                                <input type="password" id="usuario-senha" name="senha" class="form-control">
                                 <small style="color: #999;">Deixe em branco para manter a mesma</small>
                             </div>
                             <div class="form-group">
                                 <label>Tipo</label>
-                                <select id="usuario-tipo" class="form-control" required>
+                                <select id="usuario-tipo" name="tipo" class="form-control" required>
                                     <option value="garcom">Garçom</option>
                                     <option value="cozinha">Cozinha</option>
                                     <option value="admin">Administrador</option>
@@ -665,9 +658,7 @@
                                     <th>Ações</th>
                                 </tr>
                             </thead>
-                            <tbody id="usuarios-table-body">
-                                <!-- Usuários serão carregados aqui -->
-                            </tbody>
+                            <tbody id="usuarios-table-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -689,21 +680,21 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Nome do Restaurante</label>
-                                <input type="text" id="config-nome" class="form-control" value="Meu Restaurante">
+                                <input type="text" id="config-nome" name="nome_restaurante" class="form-control" value="Meu Restaurante">
                             </div>
                             <div class="form-group">
                                 <label>Tempo Médio de Preparo (min)</label>
-                                <input type="number" id="config-tempo" class="form-control" value="30">
+                                <input type="number" id="config-tempo" name="tempo_medio" class="form-control" value="30">
                             </div>
                         </div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Cor Principal</label>
-                                <input type="color" id="config-cor-primaria" class="form-control" value="#4CAF50">
+                                <input type="color" id="config-cor-primaria" name="cor_primaria" class="form-control" value="#4CAF50">
                             </div>
                             <div class="form-group">
                                 <label>Cor Secundária</label>
-                                <input type="color" id="config-cor-secundaria" class="form-control" value="#FF9800">
+                                <input type="color" id="config-cor-secundaria" name="cor_secundaria" class="form-control" value="#FF9800">
                             </div>
                         </div>
                         <div class="form-actions">
