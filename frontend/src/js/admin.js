@@ -16,22 +16,26 @@ let state = {
 // ===== INICIALIZAÇÃO =====
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Inicializando painel administrativo...');
+    verificarAdmin();
     carregarTudo();
     configurarEventos();
     configurarBuscas();
-    
-    // DEBUG: Mostrar todos os campos do formulário de usuário
-    setTimeout(() => {
-        const form = document.getElementById('form-usuario');
-        if (form) {
-            console.log('📋 Campos do formulário de usuário:');
-            const inputs = form.querySelectorAll('input, select');
-            inputs.forEach(input => {
-                console.log(`   ID: ${input.id}, Tipo: ${input.type}, Valor: ${input.value || '(vazio)'}`);
-            });
-        }
-    }, 1000);
 });
+
+async function verificarAdmin() {
+    try {
+        const response = await fetch('/api/me');
+        const user = await response.json();
+        
+        if (!response.ok || user.tipo !== 'admin') {
+            window.location.href = '/';
+        }
+        
+        document.getElementById('usuario-nome').textContent = user.nome;
+    } catch (error) {
+        window.location.href = '/';
+    }
+}
 
 // ===== CARREGAR TODOS OS DADOS =====
 async function carregarTudo() {
@@ -526,50 +530,33 @@ function getTipoIcon(tipo) {
 document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    console.log('🔍 Iniciando salvamento de usuário...');
-    
     // Pegar valores dos campos
     const id = document.getElementById('usuario-id')?.value;
-    
-    // DEBUG: Verificar se os campos existem
-    const campoNome = document.getElementById('usuario-nome');
-    const campoLogin = document.getElementById('usuario-login');
-    const campoSenha = document.getElementById('usuario-senha');
-    const campoTipo = document.getElementById('usuario-tipo');
-    
-    console.log('📋 Campos do formulário:', {
-        nome: campoNome,
-        login: campoLogin,
-        senha: campoSenha,
-        tipo: campoTipo
-    });
-    
-    // Pegar valores
-    const nome = campoNome?.value;
-    const usuario = campoLogin?.value;
-    const senha = campoSenha?.value;
-    const tipo = campoTipo?.value;
+    const nome = document.getElementById('usuario-nome')?.value;
+    const usuario = document.getElementById('usuario-login')?.value;
+    const senha = document.getElementById('usuario-senha')?.value;
+    const tipo = document.getElementById('usuario-tipo')?.value;
 
-    console.log('📝 Valores capturados:', { id, nome, usuario, senha: senha ? '****' : '', tipo });
+    console.log('📝 Dados do formulário:', { id, nome, usuario, senha: senha ? '****' : '', tipo });
 
     // VALIDAÇÕES
     if (!nome || nome.trim() === '') {
-        mostrarNotificacao('Nome é obrigatório!', 'error');
+        alert('❌ Nome é obrigatório!');
         return;
     }
 
     if (!usuario || usuario.trim() === '') {
-        mostrarNotificacao('Usuário é obrigatório!', 'error');
+        alert('❌ Usuário é obrigatório!');
         return;
     }
 
     if (!tipo) {
-        mostrarNotificacao('Tipo de usuário é obrigatório!', 'error');
+        alert('❌ Tipo de usuário é obrigatório!');
         return;
     }
 
     if (!id && (!senha || senha.trim() === '')) {
-        mostrarNotificacao('Senha é obrigatória para novo usuário!', 'error');
+        alert('❌ Senha é obrigatória para novo usuário!');
         return;
     }
 
@@ -603,20 +590,17 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
             throw new Error(respostaData.erro || 'Erro ao salvar');
         }
 
-        mostrarNotificacao(`Usuário ${id ? 'atualizado' : 'criado'} com sucesso!`, 'success');
+        alert('✅ Usuário salvo com sucesso!');
         
         // Limpar formulário
-        document.getElementById('usuario-id').value = '';
-        document.getElementById('usuario-nome').value = '';
-        document.getElementById('usuario-login').value = '';
-        document.getElementById('usuario-senha').value = '';
-        document.getElementById('usuario-tipo').value = 'garcom';
+        limparFormUsuario();
         
+        // Recarregar lista
         await carregarUsuarios();
         
     } catch (error) {
         console.error('❌ Erro:', error);
-        mostrarNotificacao('Erro: ' + error.message, 'error');
+        alert('❌ Erro: ' + error.message);
     }
 });
 
@@ -635,7 +619,7 @@ window.editarUsuario = (id) => {
 
 window.excluirUsuario = async (id) => {
     if (id === 1) {
-        mostrarNotificacao('Não é possível excluir o administrador principal', 'error');
+        alert('❌ Não é possível excluir o administrador principal');
         return;
     }
     
@@ -651,11 +635,11 @@ window.excluirUsuario = async (id) => {
             throw new Error(erro.erro || 'Erro ao excluir');
         }
         
-        mostrarNotificacao('Usuário excluído!', 'success');
+        alert('✅ Usuário excluído!');
         await carregarUsuarios();
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao excluir usuário: ' + error.message, 'error');
+        alert('❌ Erro: ' + error.message);
     }
 };
 
@@ -727,14 +711,14 @@ document.getElementById('form-config')?.addEventListener('submit', async (e) => 
         
         if (!response.ok) throw new Error('Erro ao salvar');
         
-        mostrarNotificacao('Configurações salvas!', 'success');
+        alert('✅ Configurações salvas!');
         
         document.documentElement.style.setProperty('--primary', config.cor_primaria);
         document.documentElement.style.setProperty('--secondary', config.cor_secundaria);
         
     } catch (error) {
         console.error('Erro:', error);
-        mostrarNotificacao('Erro ao salvar configurações', 'error');
+        alert('❌ Erro ao salvar configurações');
     }
 });
 
@@ -797,18 +781,7 @@ function configurarBuscas() {
 
 // ===== FUNÇÕES AUXILIARES =====
 function mostrarNotificacao(mensagem, tipo = 'info') {
-    const notificacoesAntigas = document.querySelectorAll('.notification');
-    notificacoesAntigas.forEach(n => n.remove());
-    
-    const notificacao = document.createElement('div');
-    notificacao.className = `notification ${tipo}`;
-    notificacao.textContent = mensagem;
-    document.body.appendChild(notificacao);
-    
-    setTimeout(() => {
-        notificacao.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => notificacao.remove(), 300);
-    }, 3000);
+    alert(mensagem);
 }
 
 // ===== ATUALIZAÇÃO PERIÓDICA =====
@@ -817,4 +790,3 @@ setInterval(() => {
         carregarStats();
     }
 }, 30000);
- muda ai
