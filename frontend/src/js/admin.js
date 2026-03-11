@@ -526,13 +526,13 @@ function getTipoIcon(tipo) {
     }
 }
 
-// Evento do formulário de usuário - VERSÃO CORRIGIDA
+// ===== FORMULÁRIO DE USUÁRIO - CORRIGIDO =====
 document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    // Pegar valores dos campos
+    // PEGAR VALORES COM OS IDs CORRETOS
     const id = document.getElementById('usuario-id')?.value;
-    const nome = document.getElementById('usuario-nome')?.value;
+    const nome = document.getElementById('usuario-nome')?.value;  // ← CORRIGIDO!
     const usuario = document.getElementById('usuario-login')?.value;
     const senha = document.getElementById('usuario-senha')?.value;
     const tipo = document.getElementById('usuario-tipo')?.value;
@@ -560,7 +560,7 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
         return;
     }
 
-    // Montar objeto com os dados
+    // MONTAR OBJETO
     const dados = {
         nome: nome.trim(),
         usuario: usuario.trim(),
@@ -592,10 +592,13 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
 
         alert('✅ Usuário salvo com sucesso!');
         
-        // Limpar formulário
-        limparFormUsuario();
+        // LIMPAR FORMULÁRIO
+        document.getElementById('usuario-id').value = '';
+        document.getElementById('usuario-nome').value = '';
+        document.getElementById('usuario-login').value = '';
+        document.getElementById('usuario-senha').value = '';
+        document.getElementById('usuario-tipo').value = 'garcom';
         
-        // Recarregar lista
         await carregarUsuarios();
         
     } catch (error) {
@@ -724,7 +727,6 @@ document.getElementById('form-config')?.addEventListener('submit', async (e) => 
 
 // ===== CONFIGURAÇÕES GERAIS =====
 function configurarEventos() {
-    // Tabs
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('ativo'));
@@ -735,7 +737,6 @@ function configurarEventos() {
             const tabPane = document.getElementById(`tab-${tabId}`);
             if (tabPane) tabPane.classList.add('ativo');
             
-            // Recarregar dados da tab
             if (tabId === 'categorias') carregarCategorias();
             if (tabId === 'cardapio') carregarCardapio();
             if (tabId === 'usuarios') carregarUsuarios();
@@ -745,33 +746,27 @@ function configurarEventos() {
 }
 
 function configurarBuscas() {
-    // Busca em categorias
     document.getElementById('search-categorias')?.addEventListener('input', (e) => {
         const termo = e.target.value.toLowerCase();
         const linhas = document.querySelectorAll('#categorias-table-body tr');
-        
         linhas.forEach(linha => {
             const texto = linha.textContent.toLowerCase();
             linha.style.display = texto.includes(termo) ? '' : 'none';
         });
     });
     
-    // Busca em cardápio
     document.getElementById('search-cardapio')?.addEventListener('input', (e) => {
         const termo = e.target.value.toLowerCase();
         const linhas = document.querySelectorAll('#cardapio-table-body tr');
-        
         linhas.forEach(linha => {
             const texto = linha.textContent.toLowerCase();
             linha.style.display = texto.includes(termo) ? '' : 'none';
         });
     });
     
-    // Busca em usuários
     document.getElementById('search-usuarios')?.addEventListener('input', (e) => {
         const termo = e.target.value.toLowerCase();
         const linhas = document.querySelectorAll('#usuarios-table-body tr');
-        
         linhas.forEach(linha => {
             const texto = linha.textContent.toLowerCase();
             linha.style.display = texto.includes(termo) ? '' : 'none';
