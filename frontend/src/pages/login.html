@@ -228,87 +228,75 @@
         </div>
     </div>
 
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const form = document.getElementById('loginForm');
-        const errorDiv = document.getElementById('loginError');
-        const btn = document.getElementById('btnLogin');
-        const spinner = document.getElementById('loadingSpinner');
-        const btnText = document.getElementById('btnText');
+   <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('loginForm');
+    const errorDiv = document.getElementById('loginError');
+    const btn = document.getElementById('btnLogin');
+    const spinner = document.getElementById('loadingSpinner');
+    const btnText = document.getElementById('btnText');
 
-        form.addEventListener('submit', async function(e) {
-            // IMPEDE O COMPORTAMENTO PADRÃO
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const usuario = document.getElementById('usuario').value;
-            const senha = document.getElementById('senha').value;
+    // MATA O FORM COMPLETAMENTE
+    form.onsubmit = function() { return false; };
+    
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // PEGA OS VALORES
+        const usuario = document.getElementById('usuario').value;
+        const senha = document.getElementById('senha').value;
 
-            // Validação básica
-            if (!usuario || !senha) {
-                mostrarErro('Preencha todos os campos!');
-                return false;
-            }
-
-            // Mostrar loading
-            btn.disabled = true;
-            spinner.style.display = 'inline-block';
-            btnText.textContent = 'Entrando...';
-            errorDiv.style.display = 'none';
-
-            try {
-                const response = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ usuario, senha })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.erro || 'Erro ao fazer login');
-                }
-
-                console.log('✅ Login bem sucedido:', data);
-                
-                // REDIRECIONAMENTO MANUAL (VERSÃO MAIS CONFIÁVEL)
-                console.log('Redirecionando para:', data.tipo);
-                
-                setTimeout(() => {
-                    if (data.tipo === 'admin') {
-                        window.location.href = '/admin';
-                    } else if (data.tipo === 'garcom') {
-                        window.location.href = '/garcom';
-                    } else if (data.tipo === 'cozinha') {
-                        window.location.href = '/cozinha';
-                    } else {
-                        window.location.href = '/';
-                    }
-                }, 500); // Pequeno delay para garantir
-                
-            } catch (error) {
-                console.error('❌ Erro no login:', error);
-                mostrarErro(error.message);
-                
-                // Resetar botão
-                btn.disabled = false;
-                spinner.style.display = 'none';
-                btnText.textContent = 'Entrar';
-            }
-            
+        if (!usuario || !senha) {
+            alert('Preencha tudo!');
             return false;
-        });
+        }
 
-        function mostrarErro(mensagem) {
-            errorDiv.textContent = mensagem;
+        btn.disabled = true;
+        spinner.style.display = 'inline-block';
+        btnText.textContent = 'Entrando...';
+        errorDiv.style.display = 'none';
+
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ usuario, senha })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.erro || 'Erro no login');
+            }
+
+            console.log('✅ OK:', data);
+            
+            // REDIRECIONA NA FORÇA
+            if (data.tipo === 'admin') {
+                window.location.href = '/admin';
+            } else if (data.tipo === 'garcom') {
+                window.location.href = '/garcom';
+            } else if (data.tipo === 'cozinha') {
+                window.location.href = '/cozinha';
+            } else {
+                window.location.href = '/';
+            }
+            
+        } catch (error) {
+            console.error('❌ Erro:', error);
+            errorDiv.textContent = error.message;
             errorDiv.style.display = 'block';
             
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 3000);
+            btn.disabled = false;
+            spinner.style.display = 'none';
+            btnText.textContent = 'Entrar';
         }
+        
+        return false;
     });
-    </script>
+});
+</script>
 </body>
 </html>
