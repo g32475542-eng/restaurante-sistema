@@ -6,8 +6,6 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
-
-// Carrega variáveis de ambiente
 require('dotenv').config();
 
 // ===== CONFIGURAÇÃO DO BANCO DE DADOS =====
@@ -17,7 +15,6 @@ let db;
 let pg;
 
 if (isProduction) {
-  // Em produção (Render): usar PostgreSQL
   const { Pool } = require('pg');
   pg = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -26,7 +23,6 @@ if (isProduction) {
   db = pg;
   console.log('✅ Conectado ao PostgreSQL (produção)');
 } else {
-  // Em desenvolvimento (local): usar SQLite
   const sqlite3 = require('sqlite3').verbose();
   db = new sqlite3.Database('./database/restaurante.db');
   console.log('✅ Conectado ao SQLite (desenvolvimento)');
@@ -35,14 +31,16 @@ if (isProduction) {
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server, {
-  cors: { 
-    origin: isProduction ? 'https://restaurante-sistema-4fy0.onrender.com' : '*',
+  cors: {
+    origin: isProduction ? 'https://restaurante-sistema-4fy0.onrender.com' : true,
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
-// ========== CONFIGURAÇÃO CORS CORRIGIDA ==========
+// ========== CONFIGURAÇÕES CRÍTICAS PARA O RENDER ==========
+app.set('trust proxy', 1); // Obrigatório para o Render (HTTPS)
+
 app.use(cors({
   origin: isProduction ? 'https://restaurante-sistema-4fy0.onrender.com' : true,
   credentials: true
@@ -52,17 +50,18 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../frontend/src')));
 
-// ========== CONFIGURAÇÃO DE SESSÃO CORRIGIDA ==========
+// ========== CONFIGURAÇÃO DE SESSÃO - VERSÃO FINAL CORRIGIDA ==========
 app.use(session({
   store: new SQLiteStore({ db: 'sessions.db' }),
   secret: 'restaurante-secret-key',
   resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 dias
+  saveUninitialized: true, // 👈 FORÇA CRIAÇÃO DA SESSÃO
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax' // ⚠️ CRÍTICO PARA O RENDER!
+    secure: true,            // 👈 OBRIGATÓRIO COM HTTPS
+    sameSite: 'none',        // 👈 PERMITE CROSS-SITE
+    domain: '.onrender.com'  // 👈 COMPARTILHA ENTRE SUBDOMÍNIOS
   }
 }));
 
@@ -109,10 +108,9 @@ async function run(sql, params = []) {
   }
 }
 
-// ========== CRIAR TABELAS ==========
+// ========== CRIAÇÃO DAS TABELAS ==========
 async function criarTabelas() {
   if (isProduction) {
-    // PostgreSQL
     await query(`
       CREATE TABLE IF NOT EXISTS usuarios (
         id SERIAL PRIMARY KEY,
@@ -123,7 +121,6 @@ async function criarTabelas() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
     await query(`
       CREATE TABLE IF NOT EXISTS categorias (
         id SERIAL PRIMARY KEY,
@@ -134,7 +131,6 @@ async function criarTabelas() {
         ativo INTEGER DEFAULT 1
       )
     `);
-
     await query(`
       CREATE TABLE IF NOT EXISTS cardapio (
         id SERIAL PRIMARY KEY,
@@ -146,7 +142,6 @@ async function criarTabelas() {
         tempo_preparo INTEGER DEFAULT 15
       )
     `);
-
     await query(`
       CREATE TABLE IF NOT EXISTS mesas (
         id SERIAL PRIMARY KEY,
@@ -155,7 +150,6 @@ async function criarTabelas() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
     await query(`
       CREATE TABLE IF NOT EXISTS pedidos (
         id TEXT PRIMARY KEY,
@@ -168,7 +162,6 @@ async function criarTabelas() {
         updated_at TIMESTAMP
       )
     `);
-
     await query(`
       CREATE TABLE IF NOT EXISTS pedido_itens (
         id SERIAL PRIMARY KEY,
@@ -181,7 +174,6 @@ async function criarTabelas() {
         status TEXT DEFAULT 'pendente'
       )
     `);
-
     await query(`
       CREATE TABLE IF NOT EXISTS planos (
         id SERIAL PRIMARY KEY,
@@ -194,13 +186,10 @@ async function criarTabelas() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
     console.log('✅ Tabelas PostgreSQL criadas');
   } else {
-    // SQLite
     const sqlite3 = require('sqlite3').verbose();
     const dbLocal = new sqlite3.Database('./database/restaurante.db');
-    
     dbLocal.serialize(() => {
       dbLocal.run(`CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -210,7 +199,6 @@ async function criarTabelas() {
         tipo TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
-      
       dbLocal.run(`CREATE TABLE IF NOT EXISTS categorias (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT UNIQUE NOT NULL,
@@ -219,7 +207,6 @@ async function criarTabelas() {
         ordem INTEGER DEFAULT 0,
         ativo INTEGER DEFAULT 1
       )`);
-      
       dbLocal.run(`CREATE TABLE IF NOT EXISTS cardapio (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
@@ -230,7 +217,6 @@ async function criarTabelas() {
         tempo_preparo INTEGER DEFAULT 15,
         FOREIGN KEY (categoria_id) REFERENCES categorias (id)
       )`);
-      
       dbLocal.run(`CREATE TABLE IF NOT EXISTS mesas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero INTEGER UNIQUE NOT NULL,
@@ -238,7 +224,6 @@ async function criarTabelas() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
     });
-    
     dbLocal.close();
     console.log('✅ Tabelas SQLite criadas');
   }
@@ -248,15 +233,11 @@ async function criarTabelas() {
 
 async function inserirDadosIniciais() {
   const salt = bcrypt.genSaltSync(10);
-
-  // Verificar usuários
   const usuarios = await query("SELECT COUNT(*) as count FROM usuarios");
-  
   if (usuarios[0].count === '0' || usuarios[0].count === 0) {
     const senhaAdmin = bcrypt.hashSync('123456', salt);
     const senhaJoao = bcrypt.hashSync('123456', salt);
     const senhaMaria = bcrypt.hashSync('123456', salt);
-
     if (isProduction) {
       await run(
         "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1, $2, $3, $4)",
@@ -283,26 +264,7 @@ async function inserirDadosIniciais() {
     console.log('✅ Usuários padrão criados');
   }
 
-  // Verificar planos
-  const planos = await query("SELECT COUNT(*) as count FROM planos");
-  
-  if (planos[0].count === '0' || planos[0].count === 0) {
-    if (isProduction) {
-      await run(
-        "INSERT INTO planos (nome, preco, max_restaurantes, max_usuarios, max_mesas) VALUES ($1, $2, $3, $4, $5)",
-        ['Limitado', 97.00, 1, 3, 10]
-      );
-      await run(
-        "INSERT INTO planos (nome, preco, max_restaurantes, max_usuarios, max_mesas) VALUES ($1, $2, $3, $4, $5)",
-        ['Profissional', 197.00, 3, 10, 30]
-      );
-    }
-    console.log('✅ Planos criados');
-  }
-
-  // Verificar categorias
   const categorias = await query("SELECT COUNT(*) as count FROM categorias");
-  
   if (categorias[0].count === '0' || categorias[0].count === 0) {
     const cats = [
       ['Entradas', '🥗', '#4CAF50', 1],
@@ -310,7 +272,6 @@ async function inserirDadosIniciais() {
       ['Bebidas', '🥤', '#2196F3', 3],
       ['Sobremesas', '🍰', '#9C27B0', 4]
     ];
-    
     for (const cat of cats) {
       if (isProduction) {
         await run(
@@ -322,9 +283,7 @@ async function inserirDadosIniciais() {
     console.log('✅ Categorias criadas');
   }
 
-  // Verificar mesas
   const mesas = await query("SELECT COUNT(*) as count FROM mesas");
-  
   if (mesas[0].count === '0' || mesas[0].count === 0) {
     for (let i = 1; i <= 20; i++) {
       if (isProduction) {
@@ -341,19 +300,16 @@ async function inserirDadosIniciais() {
 // ========== ROTAS DE AUTENTICAÇÃO ==========
 app.post('/api/login', async (req, res) => {
   const { usuario, senha } = req.body;
-  
   try {
     const users = await query("SELECT * FROM usuarios WHERE usuario = $1", [usuario]);
     const user = users[0];
-    
     if (!user || !bcrypt.compareSync(senha, user.senha)) {
       return res.status(401).json({ erro: 'Usuário ou senha inválidos' });
     }
-    
     req.session.userId = user.id;
     req.session.userTipo = user.tipo;
     req.session.userNome = user.nome;
-    
+    console.log(`✅ SESSÃO CRIADA: ${req.session.id} para usuário ${user.id}`);
     res.json({
       id: user.id,
       nome: user.nome,
@@ -375,24 +331,21 @@ app.get('/api/me', async (req, res) => {
   if (!req.session.userId) {
     return res.status(401).json({ erro: 'Não autenticado' });
   }
-  
   try {
     const users = await query(
-      "SELECT id, nome, usuario, tipo FROM usuarios WHERE id = $1", 
+      "SELECT id, nome, usuario, tipo FROM usuarios WHERE id = $1",
       [req.session.userId]
     );
-    
     if (!users[0]) {
       return res.status(401).json({ erro: 'Usuário não encontrado' });
     }
-    
     res.json(users[0]);
   } catch (error) {
     res.status(500).json({ erro: 'Erro interno' });
   }
 });
 
-// ========== ROTAS DE CATEGORIAS ==========
+// ========== ROTAS DE CATEGORIAS (exemplo) ==========
 app.get('/api/categorias', async (req, res) => {
   try {
     const categorias = await query("SELECT * FROM categorias ORDER BY ordem, nome");
@@ -404,17 +357,12 @@ app.get('/api/categorias', async (req, res) => {
 
 app.post('/api/categorias', async (req, res) => {
   const { nome, icone, cor, ordem } = req.body;
-  
-  if (!nome) {
-    return res.status(400).json({ erro: 'Nome é obrigatório' });
-  }
-  
+  if (!nome) return res.status(400).json({ erro: 'Nome é obrigatório' });
   try {
     const result = await run(
       "INSERT INTO categorias (nome, icone, cor, ordem) VALUES ($1, $2, $3, $4) RETURNING id",
       [nome, icone || '📋', cor || '#4CAF50', ordem || 0]
     );
-    
     res.json({ id: result.lastID, nome, icone, cor, ordem });
   } catch (error) {
     res.status(500).json({ erro: 'Erro ao criar categoria' });
@@ -427,6 +375,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/admin', (req, res) => {
+  console.log(`🔍 Acesso ao admin - Sessão ID: ${req.session.id}, userId: ${req.session.userId}`);
   if (!req.session.userId) {
     return res.redirect('/');
   }
@@ -434,22 +383,28 @@ app.get('/admin', (req, res) => {
 });
 
 app.get('/garcom', (req, res) => {
-  if (!req.session.userId) {
-    return res.redirect('/');
-  }
+  if (!req.session.userId) return res.redirect('/');
   res.sendFile(path.join(__dirname, '../frontend/src/pages/garcom/dashboard-garcom.html'));
 });
 
 app.get('/cozinha', (req, res) => {
-  if (!req.session.userId) {
-    return res.redirect('/');
-  }
+  if (!req.session.userId) return res.redirect('/');
   res.sendFile(path.join(__dirname, '../frontend/src/pages/cozinha/tela-cozinha.html'));
+});
+
+// ROTA DE TESTE (remova depois)
+app.get('/teste-admin', (req, res) => {
+  res.send(`
+    <h1>🔧 TESTE DE SESSÃO</h1>
+    <p><strong>Sessão ID:</strong> ${req.session.id || 'sem sessão'}</p>
+    <p><strong>User ID:</strong> ${req.session.userId || 'não logado'}</p>
+    <p><a href="/admin">Ir para Admin</a></p>
+    <p><a href="/api/me">Ver /api/me</a></p>
+  `);
 });
 
 // ========== INICIAR SERVIDOR ==========
 const PORT = process.env.PORT || 3000;
-
 criarTabelas().then(() => {
   server.listen(PORT, () => {
     console.log(`\n🚀 SERVIDOR RODANDO NA PORTA ${PORT}`);
