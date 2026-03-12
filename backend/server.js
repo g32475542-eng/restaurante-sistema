@@ -8,413 +8,273 @@ const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 require('dotenv').config();
 
-// ===== CONFIGURAÇÃO DO BANCO DE DADOS =====
-const isProduction = process.env.NODE_ENV === 'production';
-
-let db;
-let pg;
-
-if (isProduction) {
-  const { Pool } = require('pg');
-  pg = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-  });
-  db = pg;
-  console.log('✅ Conectado ao PostgreSQL (produção)');
-} else {
-  const sqlite3 = require('sqlite3').verbose();
-  db = new sqlite3.Database('./database/restaurante.db');
-  console.log('✅ Conectado ao SQLite (desenvolvimento)');
-}
-
 const app = express();
 const server = http.createServer(app);
+
+const isProduction = process.env.NODE_ENV === "production";
+
 const io = socketIO(server, {
   cors: {
-    origin: isProduction ? 'https://restaurante-sistema-4fy0.onrender.com' : true,
-    methods: ["GET", "POST"],
+    origin: isProduction
+      ? "https://restaurante-sistema-4fy0.onrender.com"
+      : true,
     credentials: true
   }
 });
 
-// ========== CONFIGURAÇÕES CRÍTICAS PARA O RENDER ==========
-app.set('trust proxy', 1); // Obrigatório para o Render (HTTPS)
+app.set("trust proxy", 1);
 
 app.use(cors({
-  origin: isProduction ? 'https://restaurante-sistema-4fy0.onrender.com' : true,
+  origin: isProduction
+    ? "https://restaurante-sistema-4fy0.onrender.com"
+    : true,
   credentials: true
 }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '../frontend/src')));
 
-// ========== CONFIGURAÇÃO DE SESSÃO - VERSÃO FINAL CORRIGIDA ==========
+app.use(express.static(path.join(__dirname, "../frontend/src")));
+
+const { Pool } = require("pg");
+
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: isProduction
+    ? { rejectUnauthorized: false }
+    : false
+});
+
+console.log("✅ PostgreSQL conectado");
+
 app.use(session({
-  store: new SQLiteStore({ db: 'sessions.db' }),
-  secret: 'restaurante-secret-key',
+  store: new SQLiteStore({ db: "sessions.db" }),
+  secret: process.env.SESSION_SECRET || "restaurante-secret-key",
   resave: false,
-  saveUninitialized: true, // 👈 FORÇA CRIAÇÃO DA SESSÃO
+  saveUninitialized: false,
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    secure: true,            // 👈 OBRIGATÓRIO COM HTTPS
-    sameSite: 'none',        // 👈 PERMITE CROSS-SITE
-    domain: '.onrender.com'  // 👈 COMPARTILHA ENTRE SUBDOMÍNIOS
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax"
   }
 }));
 
-// ========== FUNÇÕES AUXILIARES PARA QUERIES ==========
 async function query(sql, params = []) {
-  if (isProduction) {
-    const result = await db.query(sql, params);
-    return result.rows;
-  } else {
-    return new Promise((resolve, reject) => {
-      db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
-  }
+  const result = await db.query(sql, params);
+  return result.rows;
 }
 
-async function queryOne(sql, params = []) {
-  if (isProduction) {
-    const result = await db.query(sql, params);
-    return result.rows[0];
-  } else {
-    return new Promise((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
-  }
-}
-
-async function run(sql, params = []) {
-  if (isProduction) {
-    const result = await db.query(sql, params);
-    return { lastID: result.rows[0]?.id };
-  } else {
-    return new Promise((resolve, reject) => {
-      db.run(sql, params, function(err) {
-        if (err) reject(err);
-        else resolve({ lastID: this.lastID });
-      });
-    });
-  }
-}
-
-// ========== CRIAÇÃO DAS TABELAS ==========
 async function criarTabelas() {
-  if (isProduction) {
-    await query(`
-      CREATE TABLE IF NOT EXISTS usuarios (
-        id SERIAL PRIMARY KEY,
-        nome TEXT NOT NULL,
-        usuario TEXT UNIQUE NOT NULL,
-        senha TEXT NOT NULL,
-        tipo TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await query(`
-      CREATE TABLE IF NOT EXISTS categorias (
-        id SERIAL PRIMARY KEY,
-        nome TEXT UNIQUE NOT NULL,
-        icone TEXT DEFAULT '📋',
-        cor TEXT DEFAULT '#4CAF50',
-        ordem INTEGER DEFAULT 0,
-        ativo INTEGER DEFAULT 1
-      )
-    `);
-    await query(`
-      CREATE TABLE IF NOT EXISTS cardapio (
-        id SERIAL PRIMARY KEY,
-        nome TEXT NOT NULL,
-        preco DECIMAL(10,2) NOT NULL,
-        categoria_id INTEGER REFERENCES categorias(id),
-        descricao TEXT,
-        disponivel INTEGER DEFAULT 1,
-        tempo_preparo INTEGER DEFAULT 15
-      )
-    `);
-    await query(`
-      CREATE TABLE IF NOT EXISTS mesas (
-        id SERIAL PRIMARY KEY,
-        numero INTEGER UNIQUE NOT NULL,
-        status TEXT DEFAULT 'livre',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await query(`
-      CREATE TABLE IF NOT EXISTS pedidos (
-        id TEXT PRIMARY KEY,
-        mesa_id INTEGER REFERENCES mesas(id),
-        garcom_id INTEGER REFERENCES usuarios(id),
-        total DECIMAL(10,2) DEFAULT 0,
-        status TEXT DEFAULT 'pendente',
-        observacao TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP
-      )
-    `);
-    await query(`
-      CREATE TABLE IF NOT EXISTS pedido_itens (
-        id SERIAL PRIMARY KEY,
-        pedido_id TEXT REFERENCES pedidos(id),
-        item_id INTEGER,
-        nome TEXT NOT NULL,
-        preco DECIMAL(10,2) NOT NULL,
-        quantidade INTEGER DEFAULT 1,
-        observacao TEXT,
-        status TEXT DEFAULT 'pendente'
-      )
-    `);
-    await query(`
-      CREATE TABLE IF NOT EXISTS planos (
-        id SERIAL PRIMARY KEY,
-        nome TEXT NOT NULL,
-        preco DECIMAL(10,2) NOT NULL,
-        max_restaurantes INTEGER DEFAULT 1,
-        max_usuarios INTEGER DEFAULT 3,
-        max_mesas INTEGER DEFAULT 10,
-        recursos TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('✅ Tabelas PostgreSQL criadas');
-  } else {
-    const sqlite3 = require('sqlite3').verbose();
-    const dbLocal = new sqlite3.Database('./database/restaurante.db');
-    dbLocal.serialize(() => {
-      dbLocal.run(`CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        usuario TEXT UNIQUE NOT NULL,
-        senha TEXT NOT NULL,
-        tipo TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`);
-      dbLocal.run(`CREATE TABLE IF NOT EXISTS categorias (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT UNIQUE NOT NULL,
-        icone TEXT DEFAULT '📋',
-        cor TEXT DEFAULT '#4CAF50',
-        ordem INTEGER DEFAULT 0,
-        ativo INTEGER DEFAULT 1
-      )`);
-      dbLocal.run(`CREATE TABLE IF NOT EXISTS cardapio (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        preco REAL NOT NULL,
-        categoria_id INTEGER,
-        descricao TEXT,
-        disponivel INTEGER DEFAULT 1,
-        tempo_preparo INTEGER DEFAULT 15,
-        FOREIGN KEY (categoria_id) REFERENCES categorias (id)
-      )`);
-      dbLocal.run(`CREATE TABLE IF NOT EXISTS mesas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        numero INTEGER UNIQUE NOT NULL,
-        status TEXT DEFAULT 'livre',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`);
-    });
-    dbLocal.close();
-    console.log('✅ Tabelas SQLite criadas');
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id SERIAL PRIMARY KEY,
+      nome TEXT NOT NULL,
+      usuario TEXT UNIQUE NOT NULL,
+      senha TEXT NOT NULL,
+      tipo TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS categorias (
+      id SERIAL PRIMARY KEY,
+      nome TEXT UNIQUE NOT NULL,
+      icone TEXT DEFAULT '📋',
+      cor TEXT DEFAULT '#4CAF50',
+      ordem INTEGER DEFAULT 0,
+      ativo INTEGER DEFAULT 1
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS mesas (
+      id SERIAL PRIMARY KEY,
+      numero INTEGER UNIQUE NOT NULL,
+      status TEXT DEFAULT 'livre'
+    )
+  `);
+
+  const users = await query("SELECT COUNT(*) FROM usuarios");
+
+  if (Number(users[0].count) === 0) {
+
+    const salt = bcrypt.genSaltSync(10);
+
+    await query(
+      "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1,$2,$3,$4)",
+      ["Administrador","admin",bcrypt.hashSync("123456",salt),"admin"]
+    );
+
+    await query(
+      "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1,$2,$3,$4)",
+      ["Joao Garcom","joao",bcrypt.hashSync("123456",salt),"garcom"]
+    );
+
+    await query(
+      "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1,$2,$3,$4)",
+      ["Maria Cozinha","maria",bcrypt.hashSync("123456",salt),"cozinha"]
+    );
+
+    console.log("✅ usuários padrão criados");
   }
 
-  await inserirDadosIniciais();
-}
+  const mesas = await query("SELECT COUNT(*) FROM mesas");
 
-async function inserirDadosIniciais() {
-  const salt = bcrypt.genSaltSync(10);
-  const usuarios = await query("SELECT COUNT(*) as count FROM usuarios");
-  if (usuarios[0].count === '0' || usuarios[0].count === 0) {
-    const senhaAdmin = bcrypt.hashSync('123456', salt);
-    const senhaJoao = bcrypt.hashSync('123456', salt);
-    const senhaMaria = bcrypt.hashSync('123456', salt);
-    if (isProduction) {
-      await run(
-        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1, $2, $3, $4)",
-        ['Administrador', 'admin', senhaAdmin, 'admin']
-      );
-      await run(
-        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1, $2, $3, $4)",
-        ['João Garçom', 'joao', senhaJoao, 'garcom']
-      );
-      await run(
-        "INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES ($1, $2, $3, $4)",
-        ['Maria Cozinha', 'maria', senhaMaria, 'cozinha']
-      );
-    } else {
-      const dbLocal = new (require('sqlite3').verbose()).Database('./database/restaurante.db');
-      dbLocal.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['Administrador', 'admin', senhaAdmin, 'admin']);
-      dbLocal.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['João Garçom', 'joao', senhaJoao, 'garcom']);
-      dbLocal.run("INSERT INTO usuarios (nome, usuario, senha, tipo) VALUES (?, ?, ?, ?)",
-        ['Maria Cozinha', 'maria', senhaMaria, 'cozinha']);
-      dbLocal.close();
-    }
-    console.log('✅ Usuários padrão criados');
-  }
+  if (Number(mesas[0].count) === 0) {
 
-  const categorias = await query("SELECT COUNT(*) as count FROM categorias");
-  if (categorias[0].count === '0' || categorias[0].count === 0) {
-    const cats = [
-      ['Entradas', '🥗', '#4CAF50', 1],
-      ['Pratos', '🍽️', '#FF5722', 2],
-      ['Bebidas', '🥤', '#2196F3', 3],
-      ['Sobremesas', '🍰', '#9C27B0', 4]
-    ];
-    for (const cat of cats) {
-      if (isProduction) {
-        await run(
-          "INSERT INTO categorias (nome, icone, cor, ordem) VALUES ($1, $2, $3, $4)",
-          cat
-        );
-      }
-    }
-    console.log('✅ Categorias criadas');
-  }
-
-  const mesas = await query("SELECT COUNT(*) as count FROM mesas");
-  if (mesas[0].count === '0' || mesas[0].count === 0) {
     for (let i = 1; i <= 20; i++) {
-      if (isProduction) {
-        await run(
-          "INSERT INTO mesas (numero, status) VALUES ($1, $2)",
-          [i, 'livre']
-        );
-      }
+
+      await query(
+        "INSERT INTO mesas (numero,status) VALUES ($1,$2)",
+        [i,"livre"]
+      );
+
     }
-    console.log('✅ Mesas criadas');
+
+    console.log("✅ mesas criadas");
+
   }
+
 }
 
-// ========== ROTAS DE AUTENTICAÇÃO ==========
-app.post('/api/login', async (req, res) => {
-  const { usuario, senha } = req.body;
-  try {
-    const users = await query("SELECT * FROM usuarios WHERE usuario = $1", [usuario]);
+function auth(req,res,next){
+
+  if(!req.session.userId){
+    return res.redirect("/");
+  }
+
+  next();
+
+}
+
+app.post("/api/login", async (req,res)=>{
+
+  const {usuario,senha} = req.body;
+
+  if(!usuario || !senha){
+    return res.status(400).json({erro:"Usuário e senha obrigatórios"});
+  }
+
+  try{
+
+    const users = await query(
+      "SELECT * FROM usuarios WHERE usuario=$1",
+      [usuario]
+    );
+
     const user = users[0];
-    if (!user || !bcrypt.compareSync(senha, user.senha)) {
-      return res.status(401).json({ erro: 'Usuário ou senha inválidos' });
+
+    if(!user){
+      return res.status(401).json({erro:"Usuário ou senha inválidos"});
     }
+
+    const senhaOk = bcrypt.compareSync(senha,user.senha);
+
+    if(!senhaOk){
+      return res.status(401).json({erro:"Usuário ou senha inválidos"});
+    }
+
     req.session.userId = user.id;
     req.session.userTipo = user.tipo;
     req.session.userNome = user.nome;
-    console.log(`✅ SESSÃO CRIADA: ${req.session.id} para usuário ${user.id}`);
+
+    console.log("✅ login:",user.usuario);
+
     res.json({
-      id: user.id,
-      nome: user.nome,
-      usuario: user.usuario,
-      tipo: user.tipo
+      sucesso:true,
+      id:user.id,
+      nome:user.nome,
+      usuario:user.usuario,
+      tipo:user.tipo
     });
-  } catch (error) {
-    console.error('Erro no login:', error);
-    res.status(500).json({ erro: 'Erro interno' });
+
+  }catch(e){
+
+    console.error(e);
+
+    res.status(500).json({erro:"erro interno"});
+
   }
+
 });
 
-app.post('/api/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ ok: true });
-});
+app.post("/api/logout",(req,res)=>{
 
-app.get('/api/me', async (req, res) => {
-  if (!req.session.userId) {
-    return res.status(401).json({ erro: 'Não autenticado' });
-  }
-  try {
-    const users = await query(
-      "SELECT id, nome, usuario, tipo FROM usuarios WHERE id = $1",
-      [req.session.userId]
-    );
-    if (!users[0]) {
-      return res.status(401).json({ erro: 'Usuário não encontrado' });
-    }
-    res.json(users[0]);
-  } catch (error) {
-    res.status(500).json({ erro: 'Erro interno' });
-  }
-});
+  req.session.destroy(()=>{
 
-// ========== ROTAS DE CATEGORIAS (exemplo) ==========
-app.get('/api/categorias', async (req, res) => {
-  try {
-    const categorias = await query("SELECT * FROM categorias ORDER BY ordem, nome");
-    res.json(categorias);
-  } catch (error) {
-    res.status(500).json({ erro: 'Erro ao buscar categorias' });
-  }
-});
+    res.clearCookie("connect.sid");
 
-app.post('/api/categorias', async (req, res) => {
-  const { nome, icone, cor, ordem } = req.body;
-  if (!nome) return res.status(400).json({ erro: 'Nome é obrigatório' });
-  try {
-    const result = await run(
-      "INSERT INTO categorias (nome, icone, cor, ordem) VALUES ($1, $2, $3, $4) RETURNING id",
-      [nome, icone || '📋', cor || '#4CAF50', ordem || 0]
-    );
-    res.json({ id: result.lastID, nome, icone, cor, ordem });
-  } catch (error) {
-    res.status(500).json({ erro: 'Erro ao criar categoria' });
-  }
-});
+    res.json({sucesso:true});
 
-// ========== ROTAS DE PÁGINAS ==========
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/src/pages/login.html'));
-});
-
-app.get('/admin', (req, res) => {
-  console.log(`🔍 Acesso ao admin - Sessão ID: ${req.session.id}, userId: ${req.session.userId}`);
-  if (!req.session.userId) {
-    return res.redirect('/');
-  }
-  res.sendFile(path.join(__dirname, '../frontend/src/pages/admin/painel-admin.html'));
-});
-
-app.get('/garcom', (req, res) => {
-  if (!req.session.userId) return res.redirect('/');
-  res.sendFile(path.join(__dirname, '../frontend/src/pages/garcom/dashboard-garcom.html'));
-});
-
-app.get('/cozinha', (req, res) => {
-  if (!req.session.userId) return res.redirect('/');
-  res.sendFile(path.join(__dirname, '../frontend/src/pages/cozinha/tela-cozinha.html'));
-});
-
-// ROTA DE TESTE (remova depois)
-app.get('/teste-admin', (req, res) => {
-  res.send(`
-    <h1>🔧 TESTE DE SESSÃO</h1>
-    <p><strong>Sessão ID:</strong> ${req.session.id || 'sem sessão'}</p>
-    <p><strong>User ID:</strong> ${req.session.userId || 'não logado'}</p>
-    <p><a href="/admin">Ir para Admin</a></p>
-    <p><a href="/api/me">Ver /api/me</a></p>
-  `);
-});
-
-// ========== INICIAR SERVIDOR ==========
-const PORT = process.env.PORT || 3000;
-criarTabelas().then(() => {
-  server.listen(PORT, () => {
-    console.log(`\n🚀 SERVIDOR RODANDO NA PORTA ${PORT}`);
-    console.log(`📱 Local: http://localhost:${PORT}`);
-    if (isProduction) {
-      console.log(`🌐 Render: https://restaurante-sistema-4fy0.onrender.com`);
-    }
-    console.log(`\n🔐 LOGINS:`);
-    console.log(`   Admin: admin / 123456`);
-    console.log(`   Garçom: joao / 123456`);
-    console.log(`   Cozinha: maria / 123456\n`);
   });
+
+});
+
+app.get("/api/me", async (req,res)=>{
+
+  if(!req.session.userId){
+    return res.status(401).json({erro:"não autenticado"});
+  }
+
+  const users = await query(
+    "SELECT id,nome,usuario,tipo FROM usuarios WHERE id=$1",
+    [req.session.userId]
+  );
+
+  res.json(users[0]);
+
+});
+
+app.get("/",(req,res)=>{
+
+  res.sendFile(
+    path.join(__dirname,"../frontend/src/pages/login.html")
+  );
+
+});
+
+app.get("/admin",auth,(req,res)=>{
+
+  res.sendFile(
+    path.join(__dirname,"../frontend/src/pages/admin/painel-admin.html")
+  );
+
+});
+
+app.get("/garcom",auth,(req,res)=>{
+
+  res.sendFile(
+    path.join(__dirname,"../frontend/src/pages/garcom/dashboard-garcom.html")
+  );
+
+});
+
+app.get("/cozinha",auth,(req,res)=>{
+
+  res.sendFile(
+    path.join(__dirname,"../frontend/src/pages/cozinha/tela-cozinha.html")
+  );
+
+});
+
+const PORT = process.env.PORT || 3000;
+
+criarTabelas().then(()=>{
+
+  server.listen(PORT,()=>{
+
+    console.log("\n🚀 servidor rodando");
+    console.log("porta:",PORT);
+
+    console.log("\nlogins:");
+
+    console.log("admin / 123456");
+    console.log("joao / 123456");
+    console.log("maria / 123456");
+
+  });
+
 });
